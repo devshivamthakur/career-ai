@@ -1,0 +1,161 @@
+# ============================================
+# Global Patterns (OS & IDE)
+# ============================================
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+*.swp
+*.swo
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# IDE & Editor
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+*.swp
+*.swo
+*~
+.env.local
+.env.*.local
+
+# ============================================
+# Backend (Python / FastAPI)
+# ============================================
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual Environments
+backend/.venv/
+backend/venv/
+backend/env/
+backend/ENV/
+backend/env.bak/
+backend/venv.bak/
+
+# Testing & Coverage
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.hypothesis/
+
+# Type checking
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Linting
+.ruff_cache/
+.pylint_cache/
+
+# Database & Migration Artifacts
+backend/*.db
+backend/*.sqlite
+backend/alembic/__pycache__/
+
+# Uvicorn / FastAPI logs
+*.log
+
+# Environment Variables (NEVER commit secrets!)
+backend/.env
+backend/.env.production
+backend/.env.*.local
+
+# IDE specific to backend
+backend/.idea/
+backend/.vscode/
+
+# ============================================
+# Frontend (Node / React / Vite)
+# ============================================
+
+# Dependencies
+frontend/node_modules/
+frontend/.pnp
+frontend/.pnp.js
+
+# Build output
+frontend/dist/
+frontend/dist-ssr/
+frontend/*.local
+
+# Testing
+frontend/coverage/
+
+# Cache & Temp
+frontend/.vite/
+frontend/.eslintcache
+
+# Environment Variables (NEVER commit secrets!)
+frontend/.env
+frontend/.env.production
+frontend/.env.*.local
+
+# IDE specific to frontend
+frontend/.vscode/
+frontend/.idea/
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+frontend/.turbo
+
+# OS Specific
+.turboignore
+
+# ============================================
+# Git-related
+# ============================================
+
+.git/
+.gitattributes
+
+# ============================================
+# Project-specific
+# ============================================
+
+# PDF files and documents (optional, based on app needs)
+*.pdf
+uploads/
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# Lock files (optional - commit these for consistency)
+# frontend/package-lock.json
+# frontend/yarn.lock
+# backend/uv.lock
