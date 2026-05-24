@@ -1,13 +1,9 @@
 import React from 'react';
+import ResumeTailorPage from './pages/ResumeTailor';
 
 function App() {
   return (
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-      <div className="text-center">
-        <h1 className="text-4xl font-bold text-gray-900 mb-4">CareerAI</h1>
-        <p className="text-lg text-gray-600">Job Application & Interview Prep Assistant</p>
-      </div>
-    </div>
+    <ResumeTailorPage />
   );
 }
 

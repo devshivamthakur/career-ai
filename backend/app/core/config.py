@@ -14,7 +14,7 @@ class Settings(BaseSettings):
     DATABASE_URL: str
     
     # API Keys
-    ANTHROPIC_API_KEY: Optional[str] = None
+    OPENAI_API_KEY: Optional[str] = None
     
     # Load configuration from the .env file
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
