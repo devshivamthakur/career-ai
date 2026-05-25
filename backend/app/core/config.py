@@ -15,7 +15,10 @@ class Settings(BaseSettings):
     
     # API Keys
     OPENAI_API_KEY: Optional[str] = None
-    
+    OPENAI_BASE_URL: Optional[str] = None
+    FAST_MODEL_NAME: str = "poolside/laguna-xs.2"
+    QUALITY_MODEL_NAME: str = "poolside/laguna-m.1"
+
     # Load configuration from the .env file
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 

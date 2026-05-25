@@ -1,3 +1,10 @@
+import logging
+import sys
+
+# Basic logging configuration to stream to stdout
+logging.basicConfig(stream=sys.stdout, level=logging.INFO)
+logger = logging.getLogger(__name__)
+ 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
