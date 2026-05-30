@@ -14,7 +14,7 @@ This implementation:
 import asyncio
 import logging
 import json
-
+import hashlib
 from typing import (
     TypedDict,
     AsyncGenerator,
@@ -40,6 +40,7 @@ from langchain_core.output_parsers import PydanticOutputParser
 
 
 from app.core.config import settings
+from langchain_core.outputs import Generation
 
 from app.prompts.resume_tailoring_prompts import (
     PARSE_JD_PROMPT,
@@ -50,8 +51,37 @@ from app.prompts.resume_tailoring_prompts import (
     VALIDATE_JD_PROMPT,
 )
 from app.schemas.resume_schemas import JDValidationResult, ResumeTailorState, SkillsComparisonResult
+from app.core.caching import get_cache
 
 logger = logging.getLogger(__name__)
+
+
+def _build_langfuse_callbacks():
+    callbacks = []
+    if not (
+        settings.LANGFUSE_PUBLIC_KEY
+        or settings.LANGFUSE_SECRET_KEY
+    ):
+        return callbacks
+
+    try:
+        import os
+
+        if settings.LANGFUSE_BASE_URL:
+            os.environ.setdefault("LANGFUSE_BASE_URL", settings.LANGFUSE_BASE_URL)
+        if settings.LANGFUSE_PUBLIC_KEY:
+            os.environ.setdefault("LANGFUSE_PUBLIC_KEY", settings.LANGFUSE_PUBLIC_KEY)
+        if settings.LANGFUSE_SECRET_KEY:
+            os.environ.setdefault("LANGFUSE_SECRET_KEY", settings.LANGFUSE_SECRET_KEY)
+
+        from langfuse.langchain import CallbackHandler
+
+        callbacks.append(CallbackHandler())
+        logger.info("LangFuse callback handler enabled for ResumeTailorAgent")
+    except Exception as exc:
+        logger.warning("Could not initialize LangFuse tracer: %s", exc)
+
+    return callbacks
 
 
 # =========================================================
@@ -70,30 +100,30 @@ class ResumeTailorAgent:
         # FAST MODEL
         # =================================================
 
+        callbacks = _build_langfuse_callbacks()
+
         self.fast_llm = ChatOpenAI(
             api_key=settings.OPENAI_API_KEY,
             base_url=settings.OPENAI_BASE_URL,
             model=settings.FAST_MODEL_NAME,
             temperature=0.2,
             streaming=True,
+            callbacks=callbacks,
             # max_tokens=2500,
         )
+        self.cacheInstance = get_cache()
 
         # =================================================
         # QUALITY MODEL
         # =================================================
 
-        self.quality_llm = ChatOpenAI(
-            api_key=settings.OPENAI_API_KEY,
-            base_url=settings.OPENAI_BASE_URL,
-            model=settings.QUALITY_MODEL_NAME,
-            temperature=0.4,
-            streaming=True,
-            # max_tokens=4000,
-        )
-
         self.graph = self._build_graph()
         self.jdvalidation_parser = PydanticOutputParser(pydantic_object=JDValidationResult)
+
+    @staticmethod
+    def _hash_input(text: str) -> str:
+        """Generate hash for caching input."""
+        return hashlib.sha256(text.encode()).hexdigest()
 
     # =====================================================
     # BUILD GRAPH
@@ -104,12 +134,20 @@ class ResumeTailorAgent:
 ) -> tuple[bool, str]:
 
         """
-        Validate JD using structured output.
+        Validate JD using structured output with caching.
         """
+        prompt = job_description
+        llm_string = f"validate_jd_{settings.FAST_MODEL_NAME}"
 
-        logger.info(
-            "Validating job description..."
-        )
+        if self.cacheInstance:
+            cached_result = await self.cacheInstance.alookup(prompt, llm_string)
+            if cached_result:
+                logger.info("Semantic cache hit for validate_job_description.")
+                try:
+                    is_valid, reason = json.loads(cached_result[0].text)
+                    return is_valid, reason
+                except (json.JSONDecodeError, IndexError, TypeError):
+                    logger.warning("Failed to parse cached validation result. Re-running validation.")
 
         try:
 
@@ -139,10 +177,14 @@ class ResumeTailorAgent:
                 f"JD Validation Result: {validation_result}"
             )
 
-            return (
-                validation_result.is_valid,
-                validation_result.reason,
-            )
+            is_valid, reason = validation_result.is_valid, validation_result.reason
+
+            if self.cacheInstance:
+                result_str = json.dumps([is_valid, reason])
+                await self.cacheInstance.aupdate(prompt, llm_string, [Generation(text=result_str)])
+                logger.info("Semantic cache updated for validate_job_description.")
+
+            return is_valid, reason
 
         except Exception as e:
 
@@ -217,22 +259,40 @@ class ResumeTailorAgent:
         self,
         state: ResumeTailorState,
     ) -> Dict[str, Any]:
-        """Parse JD and analyze CV in parallel for speed."""
+        """Parse JD and analyze CV in parallel for speed with caching."""
         logger.info("Starting parallel analysis...")
         
         async def parse_jd():
-            prompt = PARSE_JD_PROMPT.format(
-                job_description=state["job_description"]
-            )
+            prompt = PARSE_JD_PROMPT.format(job_description=state["job_description"])
+            llm_string = f"parse_jd_{settings.FAST_MODEL_NAME}"
+            if self.cacheInstance:
+                cached = await self.cacheInstance.alookup(prompt, llm_string)
+                if cached:
+                    logger.info("Semantic cache hit for parse_jd.")
+                    return cached[0].text
+            
             response = await self.fast_llm.ainvoke(prompt)
-            return response.content
+            result = response.content
+            
+            if self.cacheInstance:
+                await self.cacheInstance.aupdate(prompt, llm_string, [Generation(text=result)])
+            return result
         
         async def analyze_cv():
-            prompt = EXTRACT_SKILLS_PROMPT.format(
-                resume_text=state["cv_text"]
-            )
+            prompt = EXTRACT_SKILLS_PROMPT.format(resume_text=state["cv_text"])
+            llm_string = f"analyze_cv_{settings.FAST_MODEL_NAME}"
+            if self.cacheInstance:
+                cached = await self.cacheInstance.alookup(prompt, llm_string)
+                if cached:
+                    logger.info("Semantic cache hit for analyze_cv.")
+                    return cached[0].text
+
             response = await self.fast_llm.ainvoke(prompt)
-            return response.content
+            result = response.content
+
+            if self.cacheInstance:
+                await self.cacheInstance.aupdate(prompt, llm_string, [Generation(text=result)])
+            return result
         
         # Run both in parallel
         jd_analysis, cv_analysis = await asyncio.gather(

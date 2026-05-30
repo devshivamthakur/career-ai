@@ -15,10 +15,10 @@
 8. **Export**: Implement PDF generation (`reportlab`) on the backend to export the finalized tailored resume.
 
 **Phase 3: Cover Letters & Interview Prep (Week 2)**
-9. **Cover Letter Agent**: Build LangGraph workflow for Cover Letters, reusing the JD extraction logic.
-10. **Interview Prep Agent**: Build LangGraph workflow to extract role context, map user projects to STAR method, and predict 15 likely questions.
-11. **Frontend Integration**: Build React UI views for the Cover Letter and Interview Prep generation.
-12. **Observability**: Integrate LangSmith to monitor LLM traces, token usage, and prompt effectiveness.
+9. **Cover Letter Agent**: Build langchain open ai for Cover Letters, reusing the JD extraction logic.
+10. **Interview Prep Agent**: Build langchain workflow to extract role context, map user projects to STAR method, and predict 20 likely questions and answers.
+11. **Frontend Integration**: Build React UI views for the Cover Letter and Interview Prep generation. if user click on interview question then only jd is required but if user click on cover letter then both jd and resume required.
+12. **Observability**: Integrate langfuse to monitor LLM traces, token usage, and prompt effectiveness.
 
 **Phase 4: Dashboard & Job Matching (Week 3)**
 13. **Data Extraction**: Build an initial resume parser to auto-extract structured data (skills, projects, metrics) on upload.

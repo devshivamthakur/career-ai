@@ -33,3 +33,11 @@ class ResumeTailorState(TypeDict):
 
 class ResumeExportRequest(BaseModel):
     resume_text: str
+
+
+class CoverLetterResponse(BaseModel):
+    cover_letter: str
+
+
+class InterviewPrepResponse(BaseModel):
+    interview_prep: str

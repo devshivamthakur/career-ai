@@ -1,15 +1,19 @@
-import React, { useState } from 'react';
+import { type FC, useState } from 'react';
 
 interface JobDescriptionFormProps {
   onSubmit: (jobDescription: string) => void;
   isLoading?: boolean;
   disabled?: boolean;
+  submitLabel?: string;
+  helperText?: string;
 }
 
-export const JobDescriptionForm: React.FC<JobDescriptionFormProps> = ({
+export const JobDescriptionForm: FC<JobDescriptionFormProps> = ({
   onSubmit,
   isLoading = false,
   disabled = false,
+  submitLabel = 'Generate',
+  helperText,
 }) => {
   const [jobDescription, setJobDescription] = useState<string>('');
   const [error, setError] = useState<string>('');
@@ -71,20 +75,20 @@ export const JobDescriptionForm: React.FC<JobDescriptionFormProps> = ({
               <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
               <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
             </svg>
-            Tailoring Resume...
+            Working...
           </>
         ) : (
           <>
             <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
             </svg>
-            Generate Tailored Resume
+            {submitLabel}
           </>
         )}
       </button>
 
       <p className="text-xs text-gray-500 text-center">
-        Your job description will be analyzed using AI to tailor your resume perfectly.
+        {helperText || 'Your job description will be analyzed using AI to generate the best application content.'}
       </p>
     </form>
   );

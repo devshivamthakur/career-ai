@@ -8,6 +8,10 @@ logger = logging.getLogger(__name__)
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
+from app.core.caching import initialize_semantic_cache
+
+# Initialize the semantic cache
+initialize_semantic_cache()
 
 def get_application() -> FastAPI:
     """
@@ -36,8 +40,10 @@ def get_application() -> FastAPI:
     # Include API routers here
     from app.api.routes import api_router
     from app.api.resume_routes import router as resume_router
+    from app.api.assistant_routes import router as assistant_router
     app.include_router(api_router, prefix="/api")
     app.include_router(resume_router)
+    app.include_router(assistant_router)
 
     return app
 

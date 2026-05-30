@@ -1,4 +1,3 @@
-import React from 'react';
 import ResumeTailorPage from './pages/ResumeTailor';
 
 function App() {

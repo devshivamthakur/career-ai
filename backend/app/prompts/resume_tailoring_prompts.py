@@ -509,3 +509,81 @@ FIELD RULES:
   - "warnings": array of strings — any quality issues that may reduce tailoring accuracy
     (e.g., "JD lacks specific technical requirements", "No years of experience mentioned")
 """
+
+# ─────────────────────────────────────────────
+# 7. COVER LETTER CREATION
+# ─────────────────────────────────────────────
+
+COVER_LETTER_PROMPT = """
+You are an expert career writing assistant. Your task is to produce a persuasive, ATS-friendly cover letter
+for the candidate whose resume profile is provided below.
+
+TARGET JOB DESCRIPTION:
+{job_description}
+
+JOB CONTEXT:
+{job_context}
+
+RESUME PROFILE:
+{resume_profile}
+
+INSTRUCTIONS:
+- Produce a complete cover letter with 3 short paragraphs and a concise closing sentence.
+- Use a confident, professional tone and keep the letter focused on fit for the specific role.
+- Mention relevant skills, key accomplishments, and the candidate's strongest match to this role.
+- Do NOT invent experience or metrics. Only use information present in the resume profile.
+- Keep the output suitable for copy/paste into an email or application portal.
+
+OUTPUT:
+- Start with a strong opening sentence that references the role.
+- Include one paragraph describing fit and relevant experience.
+- Include one paragraph connecting the candidate's achievements to the role's highest priorities.
+- End with a short closing paragraph expressing enthusiasm and next steps.
+
+FORMAT:
+- Plain text only, no markdown headers.
+"""
+
+# ─────────────────────────────────────────────
+# 8. INTERVIEW PREP WORKFLOW
+# ─────────────────────────────────────────────
+
+EXTRACT_PROJECTS_PROMPT = """
+You are a resume intelligence analyst. Extract the candidate's most relevant projects from the resume text below.
+Return a JSON array of up to 4 objects with keys: name, role, technologies, challenge, action, impact.
+If a project is not explicitly named, summarize the work in a short project description.
+
+RESUME TEXT:
+{resume_text}
+
+OUTPUT MUST BE VALID JSON ONLY.
+"""
+
+INTERVIEW_PREP_PROMPT = """
+You are an interview coach for technical candidates. Use the job description and candidate profile to produce a strong interview prep package.
+
+TARGET JOB DESCRIPTION:
+{job_description}
+
+JOB CONTEXT:
+{job_context}
+
+CANDIDATE PROFILE:
+{resume_profile}
+
+PROJECT SUMMARY:
+{project_summary}
+
+TASK:
+1. Provide a concise role summary in 2-3 sentences.
+2. Predict the 20 most likely interview questions the hiring team will ask for this role.
+3. For each question, provide a STAR-style answer tailored to this candidate's background and the job requirements.
+4. If project details are available, connect each answer to the most relevant achievement or project.
+5. Keep the answers practical, structured, and concise, with a strong focus on impact.
+
+OUTPUT FORMAT:
+- Begin with "Role Summary:" followed by the role context.
+- Then create a numbered list of questions and answers.
+- Each answer should use a STAR structure and remain easy to scan.
+- Use plain Markdown or plain text.
+"""

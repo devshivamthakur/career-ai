@@ -6,6 +6,7 @@ Encapsulates business logic and orchestration for resume tailoring.
 import os
 import json
 import time
+import asyncio
 import hashlib
 import logging
 import tempfile
@@ -21,6 +22,9 @@ from app.api.config import (
 from app.agents.resume_tailor import ResumeTailorAgent
 from app.services.pdf_service import PDFParsingService
 from app.utils import MIN_JOB_DESCRIPTION_LENGTH, STREAM_DELAY
+from app.core.caching import get_cache
+from langchain_core.outputs import Generation
+from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -63,41 +67,41 @@ def sse_event(event: str, data: dict) -> str:
 # ═══════════════════════════════════════════════════════════════════════
 
 class ValidationService:
-    """Handles validation of job descriptions with caching"""
+    """Handles validation of job descriptions with semantic caching"""
     
     def __init__(self, agent: ResumeTailorAgent):
         self.agent = agent
+        self.cacheInstance = get_cache()
     
     async def validate_job_description(self, jd: str) -> Tuple[bool, str]:
         """
-        Validate job description with caching.
-        Avoids redundant validation for duplicate JDs.
+        Validate job description with explicit semantic caching.
         """
-        jd_hash = compute_hash(jd)
-        
-        # Check cache
-        cached_result = await request_cache.get(jd_hash)
-        if cached_result is not None:
-            logger.debug("JD validation cache hit")
-            return cached_result
-        
-        # Validate
+        prompt = jd
+        llm_string = f"validate_jd_{settings.FAST_MODEL_NAME}"
+
+        if self.cacheInstance:
+            cached_result = await self.cacheInstance.alookup(prompt, llm_string)
+            if cached_result:
+                logger.info("Semantic cache hit for validate_job_description.")
+                try:
+                    is_valid, reason = json.loads(cached_result[0].text)
+                    return is_valid, reason
+                except (json.JSONDecodeError, IndexError, TypeError):
+                    logger.warning("Failed to parse cached validation result. Re-running validation.")
+
         try:
             is_valid, reason = await asyncio.wait_for(
                 self.agent.validate_job_description(jd),
                 timeout=ServiceConfig.JD_VALIDATION_TIMEOUT
             )
             
-            result = (is_valid, reason)
+            if self.cacheInstance:
+                result_str = json.dumps([is_valid, reason])
+                await self.cacheInstance.aupdate(prompt, llm_string, [Generation(text=result_str)])
+                logger.info("Semantic cache updated for validate_job_description.")
             
-            # Cache result
-            await request_cache.set(
-                jd_hash,
-                result,
-                ttl=ServiceConfig.VALIDATION_CACHE_TTL
-            )
-            
-            return result
+            return is_valid, reason
         
         except asyncio.TimeoutError:
             logger.error("JD validation timeout")
@@ -213,10 +217,11 @@ class FileHandlingService:
 # ═══════════════════════════════════════════════════════════════════════
 
 class StreamingService:
-    """Handles SSE streaming with backpressure and error handling"""
+    """Handles SSE streaming with backpressure, error handling, and caching"""
     
     def __init__(self, agent: ResumeTailorAgent):
         self.agent = agent
+        self.cacheInstance = get_cache()
     
     async def stream_resume_generation(
         self,
@@ -227,17 +232,53 @@ class StreamingService:
     ) -> AsyncGenerator[str, None]:
         """
         Stream tailored resume with parallel execution + filtered output.
-        Only emits events from compare_skills and polish_resume for faster UX.
+        Caches the final result and serves it directly on a cache hit.
         """
+        prompt = f"job_description: {job_description}\n---\nresume: {cv_text}"
+        llm_string = f"tailor_resume_stream_{settings.FAST_MODEL_NAME}_{settings.QUALITY_MODEL_NAME}"
+
+        # 1. Check cache
+        if self.cacheInstance:
+            cached_result = await self.cacheInstance.alookup(prompt, llm_string)
+            if cached_result:
+                logger.info("Semantic cache hit for tailor_resume_stream.")
+                try:
+                    cached_data = json.loads(cached_result[0].text)
+                    # Yield a "fake" stream from cached data
+                    yield sse_event("started", {"message": "Resume tailoring started (from cache)", "request_id": request_id, "timestamp": datetime.utcnow().isoformat()})
+                    await asyncio.sleep(STREAM_DELAY)
+                    
+                    yield sse_event("step_start", {"node": "compare_skills", "data": "Comparing Skills"})
+                    yield sse_event("step_end", {
+                        "node": "compare_skills",
+                        "matched_skills": cached_data.get("matched_skills", []),
+                        "missing_skills": cached_data.get("missing_skills", []),
+                        "ats_score": cached_data.get("ats_score", 0)
+                    })
+                    await asyncio.sleep(STREAM_DELAY)
+
+                    yield sse_event("step_start", {"node": "polish_resume", "data": "Final Optimization"})
+                    yield sse_event("step_end", {
+                        "node": "polish_resume",
+                        "final_result": cached_data.get("final_resume", "")
+                    })
+                    
+                    total_time = round(time.time() - start_time, 2)
+                    yield sse_event("completed", {"success": True, "request_id": request_id, "processing_time_seconds": total_time, "timestamp": datetime.utcnow().isoformat()})
+                    return
+                except (json.JSONDecodeError, IndexError, TypeError):
+                    logger.warning("Failed to parse cached stream data. Re-running stream.")
+
+        # 2. If no cache hit, run the real stream and collect data
         try:
-            # Start event
             yield sse_event("started", {
                 "message": "Resume tailoring started (parsing & analyzing in parallel)",
                 "request_id": request_id,
                 "timestamp": datetime.utcnow().isoformat()
             })
             
-            # Stream from agent - events are pre-formatted JSON strings
+            final_data_to_cache = {}
+            
             async for event_data in self.agent.astream_tailored_resume(
                 cv_text=cv_text,
                 job_description=job_description,
@@ -245,33 +286,38 @@ class StreamingService:
                 if not event_data:
                     continue
                 
-                # Parse the event JSON and re-emit as SSE
                 try:
                     event_obj = json.loads(event_data)
                     event_type = event_obj.get("type")
+
+                    # Collect data for caching
+                    if event_type == "step_end":
+                        if event_obj.get("node") == "compare_skills":
+                            final_data_to_cache["matched_skills"] = event_obj.get("matched_skills", [])
+                            final_data_to_cache["missing_skills"] = event_obj.get("missing_skills", [])
+                            final_data_to_cache["ats_score"] = event_obj.get("ats_score", 0)
+                        elif event_obj.get("node") == "polish_resume":
+                            final_data_to_cache["final_resume"] = event_obj.get("final_result", "")
                     
-                    # Re-emit event with proper SSE formatting
                     yield sse_event(event_type, event_obj)
                     
                 except json.JSONDecodeError:
                     logger.warning(f"Failed to parse event JSON: {event_data}")
                     continue
                 
-                # Backpressure: yield control to allow client to consume
                 if STREAM_DELAY:
-                    import asyncio
                     await asyncio.sleep(STREAM_DELAY)
             
-            # Success event with metadata
             total_time = round(time.time() - start_time, 2)
-            
             yield sse_event("completed", {
-                "success": True,
-                "request_id": request_id,
-                "processing_time_seconds": total_time,
-                "timestamp": datetime.utcnow().isoformat()
+                "success": True, "request_id": request_id, "processing_time_seconds": total_time, "timestamp": datetime.utcnow().isoformat()
             })
             
+            # 3. Update cache at the end
+            if self.cacheInstance and "final_resume" in final_data_to_cache:
+                await self.cacheInstance.aupdate(prompt, llm_string, [Generation(text=json.dumps(final_data_to_cache))])
+                logger.info("Semantic cache updated for tailor_resume_stream.")
+                
             circuit_breaker.record_success()
         
         except asyncio.CancelledError:
@@ -283,11 +329,7 @@ class StreamingService:
             circuit_breaker.record_failure()
             
             yield sse_event("error", {
-                "success": False,
-                "request_id": request_id,
-                "error": str(stream_error),
-                "error_type": type(stream_error).__name__,
-                "timestamp": datetime.utcnow().isoformat()
+                "success": False, "request_id": request_id, "error": str(stream_error), "error_type": type(stream_error).__name__, "timestamp": datetime.utcnow().isoformat()
             })
 
 
@@ -395,6 +437,8 @@ class ResumeTailorService:
             with suppress(Exception):
                 if os.path.exists(tmp_path):
                     os.remove(tmp_path)
+
+
 
 
 import asyncio

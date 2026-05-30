@@ -1,168 +1,236 @@
-import React, { useState } from 'react';
+import { type FC, useState, useMemo, useCallback } from 'react';
 import ResumeUpload from '../components/ResumeUpload';
 import JobDescriptionForm from '../components/JobDescriptionForm';
 import StreamingOutput from '../components/StreamingOutput';
+import TextOutput from '../components/TextOutput';
 import useResumeTailor from '../hooks/useResumeTailor';
+import useCoverLetter from '../hooks/useCoverLetter';
+import useInterviewPrep from '../hooks/useInterviewPrep';
 
-export const ResumeTailorPage: React.FC = () => {
-  const { isLoading, error, content, matchedSkills, missingSkills, atsScore, steps, tailorResume } = useResumeTailor();
+const TABS = [
+  { id: 'resume', label: 'Resume Tailor', description: 'Upload your resume and a job description to generate a tailored resume.' },
+  { id: 'cover', label: 'Cover Letter', description: 'Create a targeted cover letter using your resume and the job posting.' },
+  { id: 'interview', label: 'Interview Prep', description: 'Generate likely questions and STAR-style answers from the job description.' },
+];
+
+export const ResumeTailorPage: FC = () => {
+  const [activeTab, setActiveTab] = useState<'resume' | 'cover' | 'interview'>('resume');
   const [cvFile, setCvFile] = useState<File | null>(null);
+  const [copyStatus, setCopyStatus] = useState<string>('');
 
-  console.log(content,"jfhfh")
-  const handleFileSelect = (file: File) => {
+  const { isLoading: isResumeLoading, error: resumeError, content, matchedSkills, missingSkills, atsScore, steps, tailorResume } = useResumeTailor();
+  const { isLoading: isCoverLoading, error: coverError, coverLetter, generateCoverLetter } = useCoverLetter();
+  const { isLoading: isInterviewLoading, error: interviewError, interviewPrep, generateInterviewPrep } = useInterviewPrep();
+
+  const isLoading = useMemo(() => isResumeLoading || isCoverLoading || isInterviewLoading, [isResumeLoading, isCoverLoading, isInterviewLoading]);
+  const error = useMemo(() => resumeError || coverError || interviewError, [resumeError, coverError, interviewError]);
+
+  const activeTabData = useMemo(
+    () => TABS.find((tab) => tab.id === activeTab),
+    [activeTab]
+  );
+
+  const handleFileSelect = useCallback((file: File) => {
     setCvFile(file);
-  };
+    setCopyStatus('');
+  }, []);
 
-  const handleGenerateTailoredResume = async (jobDescription: string) => {
-    if (!cvFile) {
+  const handleGeneration = useCallback(async (jobDescription: string) => {
+    if ((activeTab === 'resume' || activeTab === 'cover') && !cvFile) {
       alert('Please upload a resume first');
       return;
     }
+
     try {
-      await tailorResume(cvFile, jobDescription);
+      switch (activeTab) {
+        case 'resume':
+          await tailorResume(cvFile!, jobDescription);
+          break;
+        case 'cover':
+          await generateCoverLetter(cvFile!, jobDescription);
+          break;
+        case 'interview':
+          await generateInterviewPrep(jobDescription, cvFile);
+          break;
+      }
     } catch (err) {
-      console.error('Error in tailorResume:', err);
-      // The hook will set the error state, so we don't need to do it here.
+      // Errors are handled by individual hooks, but a catch block is good practice
+      console.error('Generation failed:', err);
     }
-  };
+  }, [activeTab, cvFile, tailorResume, generateCoverLetter, generateInterviewPrep]);
+
+  const onCopy = useCallback(() => {
+    setCopyStatus('Copied to clipboard!');
+    window.setTimeout(() => setCopyStatus(''), 2400);
+  }, []);
+
+  const submitLabel = useMemo(() => {
+    switch (activeTab) {
+      case 'resume': return 'Generate Tailored Resume';
+      case 'cover': return 'Generate Cover Letter';
+      case 'interview': return 'Generate Interview Prep';
+      default: return 'Generate';
+    }
+  }, [activeTab]);
+
+  const helperText = useMemo(() => {
+    switch (activeTab) {
+      case 'interview': return 'Paste the job description and optionally upload your resume for more personalized STAR answers.';
+      case 'cover': return 'Upload your resume and paste the job description to create a tailored cover letter.';
+      default: return 'Upload your resume and paste a job description to tailor your resume.';
+    }
+  }, [activeTab]);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
-      <div className="max-w-6xl mx-auto px-4 py-12">
-        {/* Header */}
-        <div className="text-center mb-12">
-          <h1 className="text-5xl font-bold text-gray-900 mb-2">CareerAI</h1>
-          <p className="text-xl text-gray-600">Smart Resume Tailor</p>
-          <p className="text-sm text-gray-500 mt-2">
-            Automatically tailor your resume to match any job description in minutes
-          </p>
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-sky-50 to-indigo-100">
+      <div className="max-w-7xl mx-auto px-4 py-10">
+        <div className="rounded-[2rem] bg-white/90 p-8 shadow-2xl backdrop-blur-xl border border-slate-200">
+          <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
+            <div className="space-y-3">
+              <p className="text-sm uppercase tracking-[0.3em] text-sky-600">CareerAI Suite</p>
+              <h1 className="text-5xl font-semibold tracking-tight text-slate-950">Resume, Cover Letter & Interview Prep</h1>
+              <p className="max-w-2xl text-base text-slate-600">
+                One intelligent workspace to generate optimized resumes, persuasive cover letters, and interview-ready answers from a single job description.
+              </p>
+            </div>
+            <div className="rounded-3xl bg-slate-950 px-5 py-4 text-white shadow-xl">
+              <p className="text-xs uppercase tracking-[0.3em] text-cyan-300">Quick access</p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {TABS.map((tab) => (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    onClick={() => setActiveTab(tab.id as any)}
+                    className={`rounded-full px-4 py-2 text-sm font-semibold transition ${activeTab === tab.id ? 'bg-cyan-400 text-slate-950' : 'bg-slate-800/90 text-white hover:bg-slate-700'}`}
+                  >
+                    {tab.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-sm font-semibold uppercase tracking-[0.2em] text-slate-900">{activeTabData?.label}</p>
+              <h2 className="mt-3 text-3xl font-semibold text-slate-950">{activeTabData?.description}</h2>
+            </div>
+            <div className="rounded-3xl bg-sky-50 px-4 py-3 text-xs font-medium uppercase tracking-[0.2em] text-sky-700">
+              {activeTab === 'interview' ? 'Job description only required' : 'Resume upload required'}
+            </div>
+          </div>
         </div>
 
-        {/* Main Content Grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          {/* Left Column: Upload & Job Description */}
-          <div className="space-y-8">
-            {/* Resume Upload */}
-            <div className="bg-white rounded-lg shadow-lg p-8">
-              <ResumeUpload
-                onFileSelect={handleFileSelect}
-                isLoading={isLoading}
-              />
-              
-              {cvFile && (
-                <div className="mt-4 p-3 bg-green-50 border border-green-200 rounded-lg">
-                  <p className="text-sm text-green-800">
-                    ✓ Resume ready: {cvFile.name}
-                  </p>
+        <div className="mt-10 grid gap-6 lg:grid-cols-3">
+          <div className="rounded-3xl bg-white shadow-xl border border-slate-200 p-8 space-y-8">
+            <ResumeUpload onFileSelect={handleFileSelect} isLoading={isLoading} />
+            {cvFile ? (
+              <div className="rounded-3xl border border-slate-200 bg-slate-50 p-4 text-slate-700">
+                <p className="text-sm font-medium">Resume loaded:</p>
+                <p className="mt-1 text-sm text-slate-600 break-words">{cvFile.name}</p>
+              </div>
+            ) : (
+              <div className="rounded-3xl border border-slate-200 bg-slate-50 p-4 text-slate-600">
+                <p className="text-sm">Upload a PDF resume to power the Resume Tailor and Cover Letter flows. Interview Prep works with job description alone.</p>
+              </div>
+            )}
+          </div>
+
+          <div className="rounded-3xl bg-white shadow-xl border border-slate-200 p-8">
+            <JobDescriptionForm
+              onSubmit={handleGeneration}
+              isLoading={isLoading}
+              disabled={activeTab === 'cover' && !cvFile}
+              submitLabel={submitLabel}
+              helperText={helperText}
+            />
+          </div>
+        </div>
+
+        <div className="space-y-6 mt-10">
+          {activeTab === 'resume' && (
+            <div className="rounded-3xl bg-white shadow-xl border border-slate-200 p-8 space-y-6">
+              {(matchedSkills.length > 0 || missingSkills.length > 0 || atsScore !== null) && (
+                <div className="space-y-4">
+                  {atsScore !== null && (
+                    <div className="rounded-3xl border border-slate-200 bg-slate-50 p-5">
+                      <div className="flex items-center justify-between gap-4">
+                        <div>
+                          <p className="text-sm uppercase tracking-[0.2em] text-slate-500">ATS Match</p>
+                          <p className="mt-2 text-3xl font-semibold text-slate-900">{atsScore}%</p>
+                        </div>
+                        <div className="h-24 w-24 rounded-full border-4 border-slate-200 grid place-items-center text-lg font-semibold text-slate-900">
+                          {atsScore}%
+                        </div>
+                      </div>
+                      <p className="mt-3 text-sm text-slate-600">AI analysis of how well your current resume aligns with the job description.</p>
+                    </div>
+                  )}
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <div className="rounded-3xl bg-emerald-50 p-5 border border-emerald-100">
+                      <h3 className="text-sm font-semibold text-emerald-900">Matched skills</h3>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        {matchedSkills.length ? matchedSkills.map((skill, idx) => (
+                          <span key={idx} className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-medium text-emerald-900">{skill}</span>
+                        )) : <span className="text-sm text-emerald-800">No strong matches found yet</span>}
+                      </div>
+                    </div>
+                    <div className="rounded-3xl bg-rose-50 p-5 border border-rose-100">
+                      <h3 className="text-sm font-semibold text-rose-900">Skills gap</h3>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        {missingSkills.length ? missingSkills.map((skill, idx) => (
+                          <span key={idx} className="rounded-full bg-rose-100 px-3 py-1 text-xs font-medium text-rose-900">{skill}</span>
+                        )) : <span className="text-sm text-rose-800">No missing requirements detected</span>}
+                      </div>
+                    </div>
+                  </div>
                 </div>
               )}
+              <StreamingOutput content={content} steps={steps} isStreaming={isResumeLoading} error={resumeError} />
             </div>
+          )}
 
-            {/* Job Description Form */}
-            {cvFile && (
-              <div className="bg-white rounded-lg shadow-lg p-8">
-                <JobDescriptionForm
-                  onSubmit={handleGenerateTailoredResume}
-                  isLoading={isLoading}
-                  disabled={isLoading}
-                />
-              </div>
-            )}
+          {activeTab === 'cover' && (
+            <div className="rounded-3xl bg-white shadow-xl border border-slate-200 p-8">
+              <TextOutput
+                title="Generated Cover Letter"
+                content={coverLetter}
+                isLoading={isCoverLoading}
+                error={coverError}
+                actionLabel="Copy cover letter"
+                onCopy={onCopy}
+              />
+              {copyStatus && <p className="mt-4 text-sm text-slate-500">{copyStatus}</p>}
+            </div>
+          )}
 
-            {!cvFile && (
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-6 text-center">
-                <p className="text-sm text-blue-800">
-                  👆 Upload your resume first to get started
-                </p>
-              </div>
-            )}
-          </div>
-
-          {/* Right Column: Streaming Output */}
-          <div className="bg-white rounded-lg shadow-lg p-8 flex flex-col space-y-6">
-            
-            {/* ATS Score & Skills Match Section */}
-            {(matchedSkills.length > 0 || missingSkills.length > 0 || atsScore !== null) && (
-              <div className="flex flex-col space-y-4">
-                {atsScore !== null && (
-                  <div className="flex items-center justify-between p-4 bg-gradient-to-r from-indigo-50 to-blue-50 border border-indigo-100 rounded-lg">
-                    <div>
-                      <h3 className="font-semibold text-indigo-900 flex items-center">
-                        <svg className="w-5 h-5 mr-2 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
-                        Original Resume ATS Match Score
-                      </h3>
-                      <p className="text-sm text-indigo-700 mt-1">Based on comparison with the job description</p>
-                    </div>
-                    <div className="relative w-16 h-16 flex items-center justify-center">
-                      <svg className="w-full h-full transform -rotate-90" viewBox="0 0 36 36">
-                        <path className="text-indigo-100" strokeWidth="3" stroke="currentColor" fill="none" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
-                        <path className={atsScore >= 75 ? "text-green-500" : atsScore >= 50 ? "text-yellow-500" : "text-red-500"} strokeWidth="3" strokeDasharray={`${atsScore}, 100`} stroke="currentColor" fill="none" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
-                      </svg>
-                      <span className="absolute text-lg font-bold text-indigo-900">{atsScore}%</span>
-                    </div>
-                  </div>
-                )}
-                
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="p-4 bg-green-50 border border-green-100 rounded-lg flex flex-col">
-                    <h3 className="font-semibold text-green-800 mb-2 flex items-center shrink-0">
-                      <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"></path></svg>
-                      Matched Skills
-                    </h3>
-                    <div className="flex flex-wrap gap-1 max-h-32 overflow-y-auto pr-1">
-                      {matchedSkills.map((skill, idx) => (
-                        <span key={idx} className="px-2 py-1 bg-green-200 text-green-800 text-xs rounded-full">{skill}</span>
-                      ))}
-                      {matchedSkills.length === 0 && <span className="text-sm text-green-600">None found</span>}
-                    </div>
-                  </div>
-                  <div className="p-4 bg-red-50 border border-red-100 rounded-lg flex flex-col">
-                    <h3 className="font-semibold text-red-800 mb-2 flex items-center shrink-0">
-                      <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path></svg>
-                      Missing Skills
-                    </h3>
-                    <div className="flex flex-wrap gap-1 max-h-32 overflow-y-auto pr-1">
-                      {missingSkills.map((skill, idx) => (
-                        <span key={idx} className="px-2 py-1 bg-red-200 text-red-800 text-xs rounded-full">{skill}</span>
-                      ))}
-                      {missingSkills.length === 0 && <span className="text-sm text-red-600">None found</span>}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            <StreamingOutput
-              content={content}
-              steps={steps}
-              isStreaming={isLoading}
-              error={error}
-            /> 
-          </div>
+          {activeTab === 'interview' && (
+            <div className="rounded-3xl bg-white shadow-xl border border-slate-200 p-8">
+              <TextOutput
+                title="Interview Prep"
+                content={interviewPrep}
+                isLoading={isInterviewLoading}
+                error={interviewError}
+                actionLabel="Copy interview prep"
+                onCopy={onCopy}
+              />
+              {copyStatus && <p className="mt-4 text-sm text-slate-500">{copyStatus}</p>}
+            </div>
+          )}
         </div>
 
-        {/* Features Section */}
-        <div className="mt-16 grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div className="bg-white rounded-lg shadow p-6 text-center">
-            <div className="text-3xl mb-2">📄</div>
-            <h3 className="font-semibold text-gray-900 mb-2">Upload PDF</h3>
-            <p className="text-sm text-gray-600">
-              Upload your resume as a PDF. We extract the text and AI handles the analysis.
-            </p>
+        <div className="mt-10 grid gap-6 lg:grid-cols-3">
+          <div className="rounded-3xl bg-white border border-slate-200 p-8 shadow-lg">
+            <h3 className="text-xl font-semibold text-slate-900">AI-Driven Workflow</h3>
+            <p className="mt-3 text-sm text-slate-600">Upload a resume and paste the job description. Our AI pipeline parses both documents and creates context-aware outputs for your job search.</p>
           </div>
-          <div className="bg-white rounded-lg shadow p-6 text-center">
-            <div className="text-3xl mb-2">⚡</div>
-            <h3 className="font-semibold text-gray-900 mb-2">Real-time Tailoring</h3>
-            <p className="text-sm text-gray-600">
-              Paste any job description and watch as AI tailors your resume in real-time using advanced analysis.
-            </p>
+          <div className="rounded-3xl bg-white border border-slate-200 p-8 shadow-lg">
+            <h3 className="text-xl font-semibold text-slate-900">Cover Letter First Draft</h3>
+            <p className="mt-3 text-sm text-slate-600">Generate a polished cover letter tailored to the role and your resume. Use it to personalize applications in seconds.</p>
           </div>
-          <div className="bg-white rounded-lg shadow p-6 text-center">
-            <div className="text-3xl mb-2">💾</div>
-            <h3 className="font-semibold text-gray-900 mb-2">Export & Share</h3>
-            <p className="text-sm text-gray-600">
-              Download your tailored resume as PDF or TXT and submit it directly to employers.
-            </p>
+          <div className="rounded-3xl bg-white border border-slate-200 p-8 shadow-lg">
+            <h3 className="text-xl font-semibold text-slate-900">STAR Interview Answers</h3>
+            <p className="mt-3 text-sm text-slate-600">Create a list of likely questions and structured STAR answers to prepare for interviews with confidence.</p>
           </div>
         </div>
       </div>
@@ -171,3 +239,4 @@ export const ResumeTailorPage: React.FC = () => {
 };
 
 export default ResumeTailorPage;
+

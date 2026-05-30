@@ -12,12 +12,21 @@ class Settings(BaseSettings):
     
     # Database
     DATABASE_URL: str
+
+    # Redis Cache
+    REDIS_URL: str = "redis://localhost:6379"
     
-    # API Keys
+    # API Keys & Models
     OPENAI_API_KEY: Optional[str] = None
     OPENAI_BASE_URL: Optional[str] = None
+    LANGFUSE_PUBLIC_KEY: Optional[str] = None
+    LANGFUSE_SECRET_KEY: Optional[str] = None
+    LANGFUSE_BASE_URL: Optional[str] = None
+    HUGGINGFACE_API_TOKEN: Optional[str] = None
+    
     FAST_MODEL_NAME: str = "poolside/laguna-xs.2"
     QUALITY_MODEL_NAME: str = "poolside/laguna-m.1"
+    EMBEDDING_MODEL_REPO_ID: str = "BAAI/bge-base-en-v1.5"
 
     # Load configuration from the .env file
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")

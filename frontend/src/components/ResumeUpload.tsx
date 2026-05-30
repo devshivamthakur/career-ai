@@ -1,19 +1,19 @@
-import React, { useRef, useState } from 'react';
+import { type ChangeEvent, type FC, useRef, useState } from 'react';
 
 interface ResumeUploadProps {
   onFileSelect: (file: File) => void;
   isLoading?: boolean;
 }
 
-export const ResumeUpload: React.FC<ResumeUploadProps> = ({ 
-  onFileSelect, 
-  isLoading = false 
+export const ResumeUpload: FC<ResumeUploadProps> = ({
+  onFileSelect,
+  isLoading = false
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [fileName, setFileName] = useState<string>('');
   const [error, setError] = useState<string>('');
 
-  const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileSelect = (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
 
