@@ -185,7 +185,7 @@ class CareerAssistantAgent:
         )
 
         response = await self.fast_llm.ainvoke(prompt)
-        return response.content
+        return response.content.removesuffix("</assistant>")
 
     async def generate_interview_prep(
         self,
@@ -211,4 +211,4 @@ class CareerAssistantAgent:
         )
 
         response = await self.fast_llm.ainvoke(prompt)
-        return response.content
+        return response.content.removesuffix("</assistant>")

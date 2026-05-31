@@ -234,42 +234,7 @@ class StreamingService:
         Stream tailored resume with parallel execution + filtered output.
         Caches the final result and serves it directly on a cache hit.
         """
-        prompt = f"job_description: {job_description}\n---\nresume: {cv_text}"
-        llm_string = f"tailor_resume_stream_{settings.FAST_MODEL_NAME}_{settings.QUALITY_MODEL_NAME}"
 
-        # 1. Check cache
-        if self.cacheInstance:
-            cached_result = await self.cacheInstance.alookup(prompt, llm_string)
-            if cached_result:
-                logger.info("Semantic cache hit for tailor_resume_stream.")
-                try:
-                    cached_data = json.loads(cached_result[0].text)
-                    # Yield a "fake" stream from cached data
-                    yield sse_event("started", {"message": "Resume tailoring started (from cache)", "request_id": request_id, "timestamp": datetime.utcnow().isoformat()})
-                    await asyncio.sleep(STREAM_DELAY)
-                    
-                    yield sse_event("step_start", {"node": "compare_skills", "data": "Comparing Skills"})
-                    yield sse_event("step_end", {
-                        "node": "compare_skills",
-                        "matched_skills": cached_data.get("matched_skills", []),
-                        "missing_skills": cached_data.get("missing_skills", []),
-                        "ats_score": cached_data.get("ats_score", 0)
-                    })
-                    await asyncio.sleep(STREAM_DELAY)
-
-                    yield sse_event("step_start", {"node": "polish_resume", "data": "Final Optimization"})
-                    yield sse_event("step_end", {
-                        "node": "polish_resume",
-                        "final_result": cached_data.get("final_resume", "")
-                    })
-                    
-                    total_time = round(time.time() - start_time, 2)
-                    yield sse_event("completed", {"success": True, "request_id": request_id, "processing_time_seconds": total_time, "timestamp": datetime.utcnow().isoformat()})
-                    return
-                except (json.JSONDecodeError, IndexError, TypeError):
-                    logger.warning("Failed to parse cached stream data. Re-running stream.")
-
-        # 2. If no cache hit, run the real stream and collect data
         try:
             yield sse_event("started", {
                 "message": "Resume tailoring started (parsing & analyzing in parallel)",

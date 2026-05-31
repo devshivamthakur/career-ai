@@ -181,7 +181,7 @@ class ResumeTailorAgent:
 
             if self.cacheInstance:
                 result_str = json.dumps([is_valid, reason])
-                await self.cacheInstance.aupdate(prompt, llm_string, [Generation(text=result_str)])
+                self.cacheInstance.aupdate(prompt, llm_string, [Generation(text=result_str)])
                 logger.info("Semantic cache updated for validate_job_description.")
 
             return is_valid, reason
@@ -275,7 +275,7 @@ class ResumeTailorAgent:
             result = response.content
             
             if self.cacheInstance:
-                await self.cacheInstance.aupdate(prompt, llm_string, [Generation(text=result)])
+                self.cacheInstance.aupdate(prompt, llm_string, [Generation(text=result)])
             return result
         
         async def analyze_cv():
@@ -291,7 +291,7 @@ class ResumeTailorAgent:
             result = response.content
 
             if self.cacheInstance:
-                await self.cacheInstance.aupdate(prompt, llm_string, [Generation(text=result)])
+                self.cacheInstance.aupdate(prompt, llm_string, [Generation(text=result)])
             return result
         
         # Run both in parallel
@@ -348,7 +348,7 @@ class ResumeTailorAgent:
         )
 
         return {
-            "tailored_resume": response.content
+            "tailored_resume": response.content.removesuffix("</assistant>")
         }
 
     async def _polish_resume(
@@ -368,7 +368,7 @@ class ResumeTailorAgent:
         )
 
         return {
-            "final_resume": response.content
+            "final_resume": response.content.removesuffix("</assistant>")
         }
 
     # =====================================================

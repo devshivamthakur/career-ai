@@ -84,8 +84,8 @@ def initialize_semantic_cache():
         redis_cache = RedisSemanticCache(
             redis_url=settings.REDIS_URL,
             embeddings=embeddings,
-            distance_threshold=0.2, # Lower threshold for broader matching
-            ttl=60 * 60 * 8, # Cache entries expire after 24 hours
+            distance_threshold=0.8, # Lower threshold for broader matching
+            ttl=60 * 60 * 8, # Cache entries expire after 8 hours
         )
 
         # Set our service as the global LLM cache and the exported instance
