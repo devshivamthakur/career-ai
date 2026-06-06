@@ -51,29 +51,92 @@ async def unexpected_exception_handler(request: Request, exc: Exception):
     )
 
 
+def _parse_allowed_origins() -> list[str]:
+    """Parse ALLOWED_ORIGINS from settings string"""
+    if settings.ENVIRONMENT == "production":
+        # In production, parse comma-separated origins
+        origins = [origin.strip() for origin in settings.ALLOWED_ORIGINS.split(",")]
+        # Remove any empty strings
+        origins = [origin for origin in origins if origin]
+        if not origins:
+            logger.warning("No allowed origins configured for production")
+            origins = []
+    else:
+        # In development, allow localhost variants
+        origins = [origin.strip() for origin in settings.ALLOWED_ORIGINS.split(",")]
+    
+    logger.info("Configured CORS origins: %s", origins)
+    return origins
+
+
+def _add_security_headers_middleware(app: FastAPI) -> None:
+    """Add security headers to all responses"""
+    @app.middleware("http")
+    async def add_security_headers(request: Request, call_next):
+        response = await call_next(request)
+        
+        if settings.ENABLE_SECURITY_HEADERS:
+            # Prevent clickjacking
+            response.headers["X-Frame-Options"] = "DENY"
+            
+            # Prevent MIME type sniffing
+            response.headers["X-Content-Type-Options"] = "nosniff"
+            
+            # Enable XSS protection
+            response.headers["X-XSS-Protection"] = "1; mode=block"
+            
+            # Enforce HTTPS in production
+            if settings.ENVIRONMENT == "production":
+                response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+            
+            # Content Security Policy
+            response.headers["Content-Security-Policy"] = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'"
+            
+            # Prevent information leakage
+            response.headers["X-Powered-By"] = ""
+            if "Server" in response.headers:
+                del response.headers["Server"]
+        
+        return response
+
+
 def get_application() -> FastAPI:
     """
     Initialize and configure the FastAPI application.
-    Sets up CORS, routers, and basic app metadata.
+    Sets up CORS, security headers, routers, and basic app metadata.
     """
+    # Determine if docs should be visible
+    is_production = settings.ENVIRONMENT == "production"
+    show_docs = not (is_production and settings.HIDE_DOCS_IN_PRODUCTION)
+    
     app = FastAPI(
         title=settings.PROJECT_NAME,
         version=settings.VERSION,
         description="API for CareerAI - AI-Powered Job Application & Interview Prep Assistant",
-        # Disable OpenAPI docs in production for security
-        docs_url="/docs" if settings.ENVIRONMENT != "production" else None,
-        redoc_url="/redoc" if settings.ENVIRONMENT != "production" else None,
+        # Hide OpenAPI docs in production for security
+        docs_url="/docs" if show_docs else None,
+        redoc_url="/redoc" if show_docs else None,
+        openapi_url="/openapi.json" if show_docs else None,
     )
 
-    # Configure CORS for the frontend connection
-    # Update allow_origins in production to strictly allow only the frontend domain
+    # ═══════════════════════════════════════════════════════════════
+    # SECURITY: CORS Middleware
+    # ═══════════════════════════════════════════════════════════════
+    allowed_origins = _parse_allowed_origins()
+    
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"] if settings.ENVIRONMENT != "production" else ["https://your-frontend-domain.com"],
-        allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
+        allow_origins=allowed_origins,
+        allow_credentials=settings.ALLOW_CREDENTIALS,
+        allow_methods=settings.ALLOW_METHODS,
+        allow_headers=settings.ALLOW_HEADERS,
+        max_age=600,  # Cache preflight requests for 10 minutes
     )
+
+    # ═══════════════════════════════════════════════════════════════
+    # SECURITY: Add Security Headers
+    # ═══════════════════════════════════════════════════════════════
+    _add_security_headers_middleware(app)
 
     @app.middleware("http")
     async def attach_request_id(request: Request, call_next):

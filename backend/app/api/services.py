@@ -17,7 +17,7 @@ from datetime import datetime
 from fastapi import HTTPException, status, UploadFile
 
 from app.api.config import (
-    ServiceConfig, circuit_breaker, request_cache, concurrency_mgr
+    ServiceConfig, circuit_breaker, concurrency_mgr
 )
 from app.agents.resume_tailor import ResumeTailorAgent
 from app.services.pdf_service import PDFParsingService

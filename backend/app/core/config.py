@@ -28,6 +28,29 @@ class Settings(BaseSettings):
     QUALITY_MODEL_NAME: str = "poolside/laguna-m.1"
     EMBEDDING_MODEL_REPO_ID: str = "BAAI/bge-base-en-v1.5"
 
+    # ═════════════════════════════════════════════════════════════
+    # SECURITY & CORS CONFIGURATION
+    # ═════════════════════════════════════════════════════════════
+    
+    # CORS - Allowed origins for frontend access
+    # In production, set to your actual frontend domain
+    # Example: "https://example.com" or comma-separated list
+    ALLOWED_ORIGINS: str = "http://localhost:5173,http://localhost:3000"
+    
+    # Security - Hide Swagger/OpenAPI docs in production
+    HIDE_DOCS_IN_PRODUCTION: bool = True
+    
+    # Security - Enable/disable various security headers
+    ENABLE_SECURITY_HEADERS: bool = True
+    
+    # API Key for additional authentication (optional)
+    API_KEY: Optional[str] = None
+    
+    # CORS detailed configuration
+    ALLOW_CREDENTIALS: bool = True
+    ALLOW_METHODS: list[str] = ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
+    ALLOW_HEADERS: list[str] = ["Content-Type", "Authorization", "X-Request-ID"]
+    
     # Load configuration from the .env file
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 

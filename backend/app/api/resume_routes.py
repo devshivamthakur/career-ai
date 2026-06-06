@@ -27,7 +27,6 @@ from app.utils import MAX_JOB_DESCRIPTION_LENGTH, MIN_JOB_DESCRIPTION_LENGTH, MA
 from app.api.config import (
     ServiceConfig,
     circuit_breaker,
-    request_cache,
     concurrency_mgr
 )
 from app.api.services import (
@@ -346,7 +345,6 @@ async def resume_service_status():
         },
         "performance": {
             "active_requests": concurrency_mgr.get_active_request_count(),
-            "cache_size": len(request_cache.cache),
             "cache_ttl_sec": ServiceConfig.VALIDATION_CACHE_TTL,
             "circuit_breaker_state": circuit_breaker.state.value,
         },
@@ -395,7 +393,6 @@ async def cleanup_expired_cache() -> None:
     while True:
         try:
             await asyncio.sleep(300)  # 5 minutes
-            await request_cache.clear_expired()
             logger.debug("Cache cleanup completed")
         except Exception as e:
             logger.exception(f"Cache cleanup error: {str(e)}")

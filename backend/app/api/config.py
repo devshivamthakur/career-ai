@@ -111,78 +111,6 @@ class CircuitBreaker:
         
         return True  # HALF_OPEN allows test request
 
-
-# ═══════════════════════════════════════════════════════════════════════
-# REQUEST CACHING WITH TTL
-# ═══════════════════════════════════════════════════════════════════════
-
-class CacheEntry:
-    """Cache entry with TTL and metadata"""
-    
-    def __init__(self, data: any, ttl: int = 3600):
-        self.data = data
-        self.created_at = time.time()
-        self.ttl = ttl
-        self.access_count = 0
-        self.last_accessed = time.time()
-    
-    def is_expired(self) -> bool:
-        """Check if cache entry is expired"""
-        return time.time() - self.created_at > self.ttl
-    
-    def access(self) -> any:
-        """Access data and update metadata"""
-        self.last_accessed = time.time()
-        self.access_count += 1
-        return self.data
-
-
-class RequestCache:
-    """
-    LRU-based request cache with TTL support.
-    Caches JD validation results and frequently accessed data.
-    """
-    
-    def __init__(self, max_size: int = 100):
-        self.cache: Dict[str, CacheEntry] = {}
-        self.max_size = max_size
-        self.lock = asyncio.Lock()
-    
-    async def get(self, key: str) -> Optional[any]:
-        """Get value from cache"""
-        async with self.lock:
-            if key in self.cache:
-                entry = self.cache[key]
-                if not entry.is_expired():
-                    return entry.access()
-                else:
-                    del self.cache[key]
-        return None
-    
-    async def set(self, key: str, value: any, ttl: int = 3600) -> None:
-        """Set value in cache with TTL"""
-        async with self.lock:
-            # Evict oldest entry if cache is full
-            if len(self.cache) >= self.max_size:
-                oldest_key = min(
-                    self.cache.keys(),
-                    key=lambda k: self.cache[k].last_accessed
-                )
-                del self.cache[oldest_key]
-            
-            self.cache[key] = CacheEntry(value, ttl)
-    
-    async def clear_expired(self) -> None:
-        """Periodic cleanup of expired entries"""
-        async with self.lock:
-            expired_keys = [
-                k for k, v in self.cache.items()
-                if v.is_expired()
-            ]
-            for key in expired_keys:
-                del self.cache[key]
-
-
 # ═══════════════════════════════════════════════════════════════════════
 # CONCURRENCY MANAGEMENT
 # ═══════════════════════════════════════════════════════════════════════
@@ -233,7 +161,6 @@ circuit_breaker = CircuitBreaker(
     recovery_timeout=ServiceConfig.ERROR_WINDOW
 )
 
-request_cache = RequestCache(max_size=ServiceConfig.JD_HASH_CACHE_SIZE)
 
 concurrency_mgr = ConcurrencyManager(
     max_requests=ServiceConfig.MAX_CONCURRENT_REQUESTS,
