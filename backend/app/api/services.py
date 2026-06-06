@@ -21,7 +21,7 @@ from app.api.config import (
 )
 from app.agents.resume_tailor import ResumeTailorAgent
 from app.services.pdf_service import PDFParsingService
-from app.utils import MIN_JOB_DESCRIPTION_LENGTH, STREAM_DELAY
+from app.utils import MAX_JOB_DESCRIPTION_LENGTH, MIN_JOB_DESCRIPTION_LENGTH, STREAM_DELAY
 from app.core.caching import get_cache
 from langchain_core.outputs import Generation
 from app.core.config import settings
@@ -244,6 +244,9 @@ class StreamingService:
             
             final_data_to_cache = {}
             
+            prompt = job_description
+            llm_string = f"tailor_resume_{settings.FAST_MODEL_NAME}"
+
             async for event_data in self.agent.astream_tailored_resume(
                 cv_text=cv_text,
                 job_description=job_description,
@@ -320,6 +323,12 @@ class RequestValidationService:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"Job description must be at least {MIN_JOB_DESCRIPTION_LENGTH} characters"
+            )
+
+        if len(cleaned_jd) > MAX_JOB_DESCRIPTION_LENGTH:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Job description cannot exceed {MAX_JOB_DESCRIPTION_LENGTH} characters"
             )
         
         return cleaned_jd

@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, constr
 from typing import TypedDict as TypeDict
 
 # Pydantic model for the result of job description validation
@@ -32,7 +32,7 @@ class ResumeTailorState(TypeDict):
 
 
 class ResumeExportRequest(BaseModel):
-    resume_text: str
+    resume_text: constr(strip_whitespace=True, min_length=50, max_length=100000)
 
 
 class CoverLetterResponse(BaseModel):

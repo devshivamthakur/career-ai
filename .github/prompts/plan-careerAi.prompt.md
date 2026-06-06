@@ -46,7 +46,7 @@
 
 **Verification**
 1. Test PDF parsing to ensure it accurately grabs text without mangling columns.
-2. Verify LangGraph agent flows via LangSmith to ensure it doesn't hallucinate skills.
+2. Verify LangGraph agent flows via LangFuse to ensure it doesn't hallucinate skills.
 3. Test Server-Sent Events (SSE) streaming latency for smooth frontend UX.
 4. Manually verify PDF export styling and formatting.
 

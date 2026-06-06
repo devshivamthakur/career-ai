@@ -13,7 +13,7 @@ from app.agents.career_assistant import CareerAssistantAgent
 from app.api.config import circuit_breaker, concurrency_mgr, ServiceConfig
 from app.services.career_assistant_service import CareerAssistantService
 from app.api.services import generate_request_id
-from app.utils import MIN_JOB_DESCRIPTION_LENGTH
+from app.utils import MAX_JOB_DESCRIPTION_LENGTH, MIN_JOB_DESCRIPTION_LENGTH
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/career", tags=["career"])
@@ -60,7 +60,7 @@ def _check_concurrency() -> None:
 async def generate_cover_letter(
     request: Request,
     cv_file: UploadFile = File(..., description="Resume/CV PDF file"),
-    job_description: str = Form(..., min_length=MIN_JOB_DESCRIPTION_LENGTH, description="Target job description"),
+    job_description: str = Form(..., min_length=MIN_JOB_DESCRIPTION_LENGTH, max_length=MAX_JOB_DESCRIPTION_LENGTH, description="Target job description"),
 ):
     request_id = generate_request_id()
     logger.info("Request %s: Cover letter generation started", request_id)
@@ -92,7 +92,7 @@ async def generate_cover_letter(
 @router.post("/interview-prep", summary="Generate interview prep questions and answers")
 async def generate_interview_prep(
     request: Request,
-    job_description: str = Form(..., min_length=MIN_JOB_DESCRIPTION_LENGTH, description="Target job description"),
+    job_description: str = Form(..., min_length=MIN_JOB_DESCRIPTION_LENGTH, max_length=MAX_JOB_DESCRIPTION_LENGTH, description="Target job description"),
     cv_file: Optional[UploadFile] = File(None, description="Optional resume/CV PDF file"),
 ):
     request_id = generate_request_id()

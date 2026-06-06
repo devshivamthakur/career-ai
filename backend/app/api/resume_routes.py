@@ -21,7 +21,7 @@ from app.schemas.resume_schemas import ResumeExportRequest
 from app.services.pdf_export import PDFExportService
 from app.agents.resume_tailor import ResumeTailorAgent
 from app.core.config import settings
-from app.utils import MIN_JOB_DESCRIPTION_LENGTH, MAX_FILE_SIZE_MB, STREAM_DELAY
+from app.utils import MAX_JOB_DESCRIPTION_LENGTH, MIN_JOB_DESCRIPTION_LENGTH, MAX_FILE_SIZE_MB, STREAM_DELAY
 
 # Import from API infrastructure
 from app.api.config import (
@@ -105,6 +105,7 @@ async def tailor_resume_stream(
     job_description: str = Form(
         ...,
         min_length=MIN_JOB_DESCRIPTION_LENGTH,
+        max_length=MAX_JOB_DESCRIPTION_LENGTH,
         description="Target job description"
     ),
     background_tasks: BackgroundTasks = BackgroundTasks()

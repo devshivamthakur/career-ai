@@ -41,6 +41,10 @@ class ServiceConfig:
     # File handling
     TEMP_FILE_CLEANUP_DELAY = 60  # seconds
     TEMP_FILE_PREFIX = "resume_tailor_"
+
+    # Rate limiting
+    MAX_REQUESTS_PER_CLIENT = 20
+    RATE_LIMIT_WINDOW = 60
     
     # Health monitoring
     ERROR_THRESHOLD = 0.1  # 10% error rate triggers circuit breaker
