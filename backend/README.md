@@ -26,8 +26,21 @@ Create a `.env` file in `backend/` with values for:
 ```env
 DATABASE_URL=postgresql://user:pass@localhost:5432/mydb
 REDIS_URL=redis://localhost:6379
+LLM_PROVIDER=openai  # or aws
+
+# OpenAI settings
 OPENAI_API_KEY=your-openai-key
 OPENAI_BASE_URL=https://api.openai.com/v1
+
+# AWS Bedrock settings (when LLM_PROVIDER=aws)
+# AWS_REGION=us-east-1
+# AWS_ACCESS_KEY_ID=your-aws-access-key-id
+# AWS_SECRET_ACCESS_KEY=your-aws-secret-access-key
+# AWS_SESSION_TOKEN=your-aws-session-token
+# AWS_CREDENTIALS_PROFILE_NAME=your-aws-profile-name
+# AWS_MODEL_PROVIDER=mistral
+# AWS_FAST_MODEL_NAME=mistral.voxtral-mini-3b-2507
+
 LANGFUSE_PUBLIC_KEY=your-langfuse-public-key
 LANGFUSE_SECRET_KEY=your-langfuse-secret-key
 LANGFUSE_BASE_URL=https://api.langfuse.com

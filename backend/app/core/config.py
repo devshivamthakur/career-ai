@@ -19,6 +19,12 @@ class Settings(BaseSettings):
     # API Keys & Models
     OPENAI_API_KEY: Optional[str] = None
     OPENAI_BASE_URL: Optional[str] = None
+    LLM_PROVIDER: str = "openai"
+    AWS_REGION: Optional[str] = None
+    AWS_ACCESS_KEY_ID: Optional[str] = None
+    AWS_SECRET_ACCESS_KEY: Optional[str] = None
+    AWS_CREDENTIALS_PROFILE_NAME: Optional[str] = None
+    AWS_MODEL_PROVIDER: str = "mistral"
     LANGFUSE_PUBLIC_KEY: Optional[str] = None
     LANGFUSE_SECRET_KEY: Optional[str] = None
     LANGFUSE_BASE_URL: Optional[str] = None

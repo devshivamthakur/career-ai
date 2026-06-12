@@ -162,18 +162,22 @@ Your reputation (and the candidate's job prospects) depends on it.
 # ─────────────────────────────────────────────
 
 PARSE_JD_PROMPT = """
-You are an expert talent intelligence analyst. Your task is to perform a deep structural analysis
-of the job description below and produce a machine-readable, strategy-ready extraction.
-
-This output will be used downstream to:
-  a) Score a candidate's resume against this JD
-  b) Identify gaps and strengths
-  c) Rewrite the resume to maximize ATS and recruiter alignment
+You are an advanced AI model powering an Applicant Tracking System (ATS). Your primary function is to parse job descriptions with perfect precision.
+Your task is to perform a deep, literal analysis of the job description below and produce a machine-readable, strategy-ready extraction.
+Your output is critical for resume scoring and tailoring, so accuracy is paramount.
 
 ─────────────────────────────────────────────
 JOB DESCRIPTION:
 {job_description}
 ─────────────────────────────────────────────
+
+═══════════════════════════════════════════
+CORE DIRECTIVE: ATS-FIRST PARSING
+═══════════════════════════════════════════
+- Your analysis must be from the perspective of a machine (an ATS).
+- An ATS matches keywords and phrases literally. It does not understand semantics or synonyms.
+- Therefore, all extracted keywords and phrases MUST BE VERBATIM copies from the job description.
+- DO NOT paraphrase, summarize, or change the casing of keywords.
 
 EXTRACTION REQUIREMENTS:
 
@@ -195,9 +199,12 @@ EXTRACTION REQUIREMENTS:
    - Scale/complexity indicators (e.g., "experience with systems handling 10M+ users")
 
 4. ATS KEYWORD INDEX
-   - List all high-signal keywords and exact phrases from the JD that an ATS would scan for.
+   - CRITICAL: List all high-signal keywords and exact phrases from the JD that an ATS would scan for.
+   - You MUST extract these terms VERBATIM. DO NOT ALTER THEM IN ANY WAY.
    - Include: technical terms, tools, methodologies, domain terms, role-specific language.
-   - Preserve exact casing and phrasing (e.g., "CI/CD pipelines" not "CI CD").
+   - Preserve exact casing, punctuation, and phrasing.
+   - Example: If the JD says "RESTful APIs", you must extract "RESTful APIs", not "REST APIs" or "restful apis".
+   - Example: If the JD says "CI/CD pipelines", you must extract "CI/CD pipelines", not "CI CD".
 
 5. TOP 5 CORE RESPONSIBILITIES
    - Concise, verb-led summaries of primary job duties
@@ -214,8 +221,15 @@ EXTRACTION REQUIREMENTS:
    - Any implicit requirements not stated directly (e.g., startup experience implied by language)
    - Potential disqualifiers a candidate should be aware of
 
-Produce a structured, well-labeled output. Be specific, not generic. This analysis will drive
-resume rewriting — precision here directly impacts interview conversion rates.
+Produce well-labeled output. This analysis will drive resume rewriting — precision here directly impacts interview conversion rates.
+
+OUTPUT FORMAT:
+* Well-labeled sections with clear headings.
+* Use bullet points for lists.
+* CRITICAL: Use the exact, verbatim phrasing from the JD for all keywords and requirements. Do not paraphrase or summarize these terms.
+* Use concise, recruiter-friendly language for synthesized sections like "TOP 5 CORE RESPONSIBILITIES".
+
+Note: output must be in string format, not JSON, as it will be used in prompt templates downstream.
 """
 
 # ─────────────────────────────────────────────
@@ -330,7 +344,7 @@ COMPARE_SKILLS_PROMPT = """
 You are an elite ATS resume strategist and hiring intelligence expert.
 
 Your task is to deeply compare a candidate profile against a target job description
-and generate a structured ATS-focused skill analysis.
+and generate a structured ATS-focused skill analysis in JSON format.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 JOB REQUIREMENTS ANALYSIS:
@@ -340,63 +354,40 @@ CANDIDATE PROFILE:
 {user_profile}
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-OUTPUT REQUIREMENTS:
+JSON OUTPUT SCHEMA:
+You MUST output a single, valid JSON object with the following schema.
+Do NOT include markdown formatting (e.g., ```json) or any other text outside the JSON object.
 
-You MUST generate the following:
-
-1. ATS MATCH SCORE
-- Provide a numeric ATS score between 0 and 100.
-- Score should reflect:
-  - technical skill alignment
-  - experience relevance
-  - keyword matching
-  - domain fit
-  - seniority alignment
-
-2. MATCHED SKILLS
-Return a list of:
-- technologies
-- frameworks
-- tools
-- platforms
-- methodologies
-- soft skills
-that clearly match the JD.
-
-Only include skills explicitly supported by the candidate profile.
-
-3. MISSING SKILLS
-Return a list of important JD skills or requirements missing from the candidate profile.
-
-Focus especially on:
-- required technologies
-- cloud/platform skills
-- architecture requirements
-- certifications
-- domain experience
-- tooling gaps
-
-4. DETAILED SKILLS COMPARISON
-Provide a recruiter-grade strategic analysis including:
-
-- ATS strengths
-- keyword alignment
-- technical fit
-- domain fit
-- experience relevance
-- recruiter perception
-- transferable skills
-- major risks
-- keyword optimization opportunities
-- resume tailoring recommendations
-- top ATS improvement opportunities
+{{
+  "ats_score": {{
+    "score": "A numeric ATS score between 0 and 100",
+    "explanation": "A brief justification for the score, considering technical alignment, experience, keyword matching, domain fit, and seniority."
+  }},
+  "matched_skills": [
+    "A list of technologies, frameworks, tools, platforms, methodologies, and soft skills that clearly match the JD. Only include skills explicitly supported by the candidate profile. Return an empty list [] if none."
+  ],
+  "missing_skills": [
+    "A list of important JD skills or requirements missing from the candidate profile, focusing on required technologies, cloud/platform skills, architecture, certifications, domain experience, and tooling gaps. Return an empty list [] if none."
+  ],
+  "comparison_details": {{
+    "ats_strengths": "Analysis of ATS strengths and keyword alignment.",
+    "technical_fit": "Assessment of technical fit and domain relevance.",
+    "experience_relevance": "Evaluation of experience relevance and how it's perceived by recruiters.",
+    "transferable_skills": "Identification of transferable skills.",
+    "major_risks": "Highlighting major risks or gaps.",
+    "keyword_optimization": "Opportunities for keyword optimization.",
+    "tailoring_recommendations": "Actionable resume tailoring recommendations.",
+    "top_improvements": "The top ATS improvement opportunities."
+  }}
+}}
 
 IMPORTANT RULES:
-- Be highly specific and actionable.
-- Never hallucinate skills.
+- Be highly specific and actionable in your analysis.
+- Never hallucinate skills; base all analysis on the provided profile.
+- Return an empty list `[]` for `matched_skills` or `missing_skills` if none are found.
 - Think like both an ATS system and a senior recruiter.
 - Use concise but detailed professional analysis.
-- Avoid generic feedback.
+- Avoid generic feedback. The entire output must be a single JSON object.
 """
 # ─────────────────────────────────────────────
 # 4. ATS-OPTIMIZED RESUME REWRITER (CORE PROMPT)
@@ -707,18 +698,23 @@ FINAL OUTPUT INSTRUCTIONS (CRITICAL)
 ═══════════════════════════════════════════
 
 1. Apply ALL corrections identified above
-2. Output ONLY the final, corrected, submission-ready resume
-3. Do NOT include:
+2. BEGIN your output IMMEDIATELY with "# [Candidate Name]" — the very first character of
+   your response must be "#". No exceptions.
+3. Do NOT include ANYTHING before the resume — no preamble, no confirmation sentence,
+   no "Here is...", no "The following...", no "Based on...", no acknowledgment that you
+   completed the audit, no summary of changes made.
+4. Do NOT include:
    - QA reports or audit notes
    - Explanatory text or meta-commentary
    - Suggestions or caveats
    - Original vs. corrected comparisons
-4. Use strict Markdown format:
+   - Any sentence describing what you are about to output
+5. Use strict Markdown format:
    - # [Name] for title
    - ## [Section] for headers
    - Standard bullet points with "-"
    - Bold (**) for role titles and education
-5. The output must be immediately ready to:
+6. The output must be immediately ready to:
    - Copy/paste into job application portals
    - Export directly to PDF
    - Send to recruiters
@@ -735,9 +731,10 @@ SUCCESS CRITERIA FOR FINAL RESUME
 ✓ ATS-compliant formatting
 ✓ Resume is compelling and recruiter-ready
 
-Do NOT output until ALL criteria are met.
+FINAL REMINDER: Your response must start with "# " followed immediately by the candidate's
+name. Any text before this is a critical failure. Do not narrate, confirm, or explain.
+Output the resume and nothing else.
 """
-
 # ─────────────────────────────────────────────
 # 6. JOB DESCRIPTION VALIDATOR
 # ─────────────────────────────────────────────

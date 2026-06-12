@@ -28,7 +28,7 @@ from langgraph.graph import (
     START,
 )
 
-from langchain_openai import ChatOpenAI
+from app.core.llm import build_chat_model
 
 from langchain_core.messages import (
     AIMessageChunk,
@@ -102,15 +102,8 @@ class ResumeTailorAgent:
 
         callbacks = _build_langfuse_callbacks()
 
-        self.fast_llm = ChatOpenAI(
-            api_key=settings.OPENAI_API_KEY,
-            base_url=settings.OPENAI_BASE_URL,
-            model=settings.FAST_MODEL_NAME,
-            temperature=0.2,
-            streaming=True,
-            callbacks=callbacks,
-            # max_tokens=2500,
-        )
+        self.structure_llm = build_chat_model(streaming=False, callbacks=callbacks)
+        self.helper_llm = build_chat_model(streaming=False, callbacks=callbacks)
         self.cacheInstance = get_cache()
 
         # =================================================
@@ -124,6 +117,33 @@ class ResumeTailorAgent:
     def _hash_input(text: str) -> str:
         """Generate hash for caching input."""
         return hashlib.sha256(text.encode()).hexdigest()
+
+    @staticmethod
+    def _extract_text_from_response(response: Any) -> str:
+        """Normalizes LLM response payloads to plain text."""
+        if hasattr(response, "content"):
+            content = response.content
+            if isinstance(content, list):
+                texts = []
+                for item in content:
+                    if isinstance(item, dict):
+                        texts.append(str(item.get("text", "")))
+                    elif hasattr(item, "text"):
+                        texts.append(str(item.text))
+                    else:
+                        texts.append(str(item))
+                return "".join(texts)
+            return str(content)
+
+        if hasattr(response, "generations"):
+            generations = response.generations
+            if generations and len(generations) > 0:
+                first_gen = generations[0]
+                if isinstance(first_gen, list) and len(first_gen) > 0:
+                    return str(getattr(first_gen[0], "text", ""))
+                return str(getattr(first_gen, "text", ""))
+
+        return str(response)
 
     # =====================================================
     # BUILD GRAPH
@@ -152,7 +172,7 @@ class ResumeTailorAgent:
         try:
 
             structured_llm = (
-                self.fast_llm
+                self.structure_llm
                 | self.jdvalidation_parser
             )
 
@@ -271,8 +291,8 @@ class ResumeTailorAgent:
                     logger.info("Semantic cache hit for parse_jd.")
                     return cached[0].text
             
-            response = await self.fast_llm.ainvoke(prompt)
-            result = response.content
+            response = await self.helper_llm.ainvoke(prompt)
+            result = self._extract_text_from_response(response)
             
             if self.cacheInstance:
                 self.cacheInstance.aupdate(prompt, llm_string, [Generation(text=result)])
@@ -287,8 +307,8 @@ class ResumeTailorAgent:
                     logger.info("Semantic cache hit for analyze_cv.")
                     return cached[0].text
 
-            response = await self.fast_llm.ainvoke(prompt)
-            result = response.content
+            response = await self.helper_llm.ainvoke(prompt)
+            result = self._extract_text_from_response(response)
 
             if self.cacheInstance:
                 self.cacheInstance.aupdate(prompt, llm_string, [Generation(text=result)])
@@ -312,7 +332,7 @@ class ResumeTailorAgent:
     ) ->Dict[str, Any]:
         logger.info("Comparing skills...")
         
-        structured_llm = self.fast_llm.with_structured_output(SkillsComparisonResult)
+        structured_llm = self.structure_llm.with_structured_output(SkillsComparisonResult)
 
         prompt = COMPARE_SKILLS_PROMPT.format(
             job_requirements=state["jd_analysis"],
@@ -343,12 +363,12 @@ class ResumeTailorAgent:
             analysis=state["skills_comparison"],
         )
 
-        response = await self.fast_llm.ainvoke(
+        response = await self.helper_llm.ainvoke(
             prompt
         )
 
         return {
-            "tailored_resume": response.content.removesuffix("</assistant>")
+            "tailored_resume": self._extract_text_from_response(response).removesuffix("</assistant>")
         }
 
     async def _polish_resume(
@@ -363,12 +383,12 @@ class ResumeTailorAgent:
             job_description=state["job_description"],
         )
 
-        response = await self.fast_llm.ainvoke(
+        response = await self.helper_llm.ainvoke(
             prompt
         )
 
         return {
-            "final_resume": response.content.removesuffix("</assistant>")
+            "final_resume": self._extract_text_from_response(response).removesuffix("</assistant>")
         }
 
     # =====================================================

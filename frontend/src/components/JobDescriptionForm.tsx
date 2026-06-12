@@ -17,6 +17,7 @@ export const JobDescriptionForm: FC<JobDescriptionFormProps> = ({
 }) => {
   const [jobDescription, setJobDescription] = useState<string>('');
   const [error, setError] = useState<string>('');
+  const CHARACTER_LIMIT = 15000;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -32,8 +33,15 @@ export const JobDescriptionForm: FC<JobDescriptionFormProps> = ({
       return;
     }
 
+    if (jobDescription.length > CHARACTER_LIMIT) {
+      setError(`Job description exceeds the ${CHARACTER_LIMIT.toLocaleString()} character limit.`);
+      return;
+    }
+
     onSubmit(jobDescription);
   };
+
+  const characterCountColor = jobDescription.length > CHARACTER_LIMIT ? 'text-red-600' : 'text-gray-500';
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
@@ -52,9 +60,10 @@ export const JobDescriptionForm: FC<JobDescriptionFormProps> = ({
           disabled={disabled || isLoading}
           rows={10}
           className="w-full px-4 py-3 border border-gray-300 rounded-lg shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-50 disabled:text-gray-500"
+          maxLength={CHARACTER_LIMIT + 500} // Soft limit in textarea, hard limit in validation
         />
-        <p className="mt-1 text-sm text-gray-500">
-          {jobDescription.length} characters
+        <p className={`mt-1 text-sm text-right ${characterCountColor}`}>
+          {jobDescription.length.toLocaleString()} / {CHARACTER_LIMIT.toLocaleString()}
         </p>
       </div>
 

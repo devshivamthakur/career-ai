@@ -349,10 +349,19 @@ async def resume_service_status():
             "circuit_breaker_state": circuit_breaker.state.value,
         },
         "model": {
-            "provider": "OpenAI",
-            "fast_model": settings.FAST_MODEL_NAME,
+            "provider": settings.LLM_PROVIDER.capitalize(),
+            "fast_model": settings.AWS_FAST_MODEL_NAME if settings.LLM_PROVIDER.lower() == "aws" else settings.FAST_MODEL_NAME,
             "quality_model": settings.QUALITY_MODEL_NAME,
-            "api_configured": bool(settings.OPENAI_API_KEY),
+            "api_configured": bool(settings.OPENAI_API_KEY)
+            if settings.LLM_PROVIDER.lower() == "openai"
+            else bool(
+                settings.AWS_REGION
+                and (
+                    settings.AWS_ACCESS_KEY_ID
+                    or settings.AWS_SECRET_ACCESS_KEY
+                    or settings.AWS_CREDENTIALS_PROFILE_NAME
+                )
+            ),
         },
         "errors": {
             "initialization_error": agent_init_error,

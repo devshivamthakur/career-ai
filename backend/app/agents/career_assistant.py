@@ -5,7 +5,7 @@ import hashlib
 import json
 from typing import Optional
 
-from langchain_openai import ChatOpenAI
+from app.core.llm import build_chat_model
 from langchain_core.messages import HumanMessage
 from langchain_core.output_parsers import PydanticOutputParser
 from langchain_core.outputs import Generation
@@ -55,14 +55,7 @@ class CareerAssistantAgent:
     def __init__(self):
         callbacks = _build_langfuse_callbacks()
 
-        self.fast_llm = ChatOpenAI(
-            api_key=settings.OPENAI_API_KEY,
-            base_url=settings.OPENAI_BASE_URL,
-            model=settings.FAST_MODEL_NAME,
-            temperature=0.2,
-            streaming=False,
-            callbacks=callbacks,
-        )
+        self.fast_llm = build_chat_model(streaming=False, callbacks=callbacks)
         self.cacheInstance = get_cache()
 
         self.jdvalidation_parser = PydanticOutputParser(pydantic_object=JDValidationResult)
