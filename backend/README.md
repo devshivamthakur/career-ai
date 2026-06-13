@@ -1,53 +1,85 @@
 # CareerAI Backend
 
-Backend API for CareerAI: AI-powered resume tailoring, cover letter generation, and interview prep.
+FastAPI backend for CareerAI — an AI-powered job application assistant providing resume tailoring (with streaming), cover letter generation, and interview preparation.
+
+## Tech Stack
+
+| Technology | Purpose |
+|---|---|
+| Python 3.14+, FastAPI | Async web framework |
+| LangGraph | Resume tailoring workflow as a state graph |
+| LangChain + LangChain-OpenAI / AWS Bedrock | LLM invocation |
+| LangFuse | LLM observability and tracing |
+| Redis | Rate limiting, semantic caching |
+| PostgreSQL | Primary database (via SQLAlchemy + Alembic) |
+| PDFplumber | PDF text extraction |
+| ReportLab | PDF export generation |
+
+## Architecture
+
+```
+├── app/
+│   ├── agents/
+│   │   ├── resume_tailor.py       # LangGraph state machine (4 nodes)
+│   │   └── career_assistant.py    # Cover letter & interview prep agent
+│   ├── api/
+│   │   ├── resume_routes.py       # POST /api/resume/tailor/stream, /export-pdf
+│   │   ├── assistant_routes.py    # POST /api/career/cover-letter, /interview-prep
+│   │   ├── services.py            # Service layer: validation, PDF, streaming, orchestration
+│   │   ├── rate_limit.py          # Redis-backed rate limiter
+│   │   ├── config.py              # Circuit breaker, concurrency manager, service config
+│   │   └── routes.py              # Shared API router
+│   ├── core/
+│   │   ├── config.py              # Pydantic settings (env vars)
+│   │   ├── llm.py                 # Chat model builder (OpenAI or AWS Bedrock)
+│   │   └── caching.py             # Redis semantic cache with HuggingFace embeddings
+│   ├── db/
+│   │   ├── database.py            # SQLAlchemy engine + session
+│   │   └── models.py              # MasterResume, JobApplication, Generation
+│   ├── schemas/
+│   │   └── resume_schemas.py      # Pydantic models (JDValidation, SkillsComparison, state)
+│   ├── services/
+│   │   ├── pdf_service.py         # PDF text extraction
+│   │   ├── pdf_export.py          # Resume PDF generation
+│   │   └── career_assistant_service.py  # Career service orchestrator
+│   ├── prompts/
+│   │   └── resume_tailoring_prompts.py  # All LLM prompts
+│   └── utils.py                   # Constants (file size, JD length limits)
+├── alembic/                       # Database migrations
+├── pyproject.toml
+└── main.py                        # Entry point for dev server
+```
 
 ## Features
 
-- FastAPI backend with streaming resume tailoring
-- PDF resume upload and text extraction
-- Redis-backed rate limiting
-- Job description validation and length limits
-- Circuit breaker and concurrency protection
-- Tailored resume export to PDF
-- Cover letter and interview prep endpoints
+### Resume Tailoring (LangGraph Workflow)
+- **4-node state graph**: `parallel_analyze` → `compare_skills` → `rewrite_resume` → `polish_resume`
+- **Parallel execution**: JD parsing and CV analysis run concurrently
+- **True token streaming** via `astream_events()` — only critical nodes emit SSE events
+- **ATS score** (0–100) with matched/missing skills
+- **JD validation** via structured LLM output (Pydantic-parsed)
+- **PDF export** via reportlab
+
+### Career Assistant
+- **Cover letter generation** — parses job context + resume profile, generates 3-paragraph letter
+- **Interview preparation** — generates questions with STAR-format answers, optionally personalized with resume projects
+
+### Production Infrastructure
+- **Semantic caching** — Redis + HuggingFace embeddings (`BAAI/bge-base-en-v1.5`) cache LLM responses semantically
+- **Circuit breaker** — opens when error rate exceeds 10% in 60s window
+- **Concurrency management** — max 10 concurrent requests, max 5 concurrent PDF parses
+- **Rate limiting** — 20 requests/client/60s (Redis-backed)
+- **Security headers** — X-Frame-Options, CSP, HSTS, X-Content-Type-Options, X-XSS-Protection
+- **Request ID tracking** — every request/response gets a unique ID
+- **CORS** — configurable allowed origins (separate dev/prod)
 
 ## Requirements
 
 - Python 3.14+
-- Redis instance
-- Backend virtual environment
-- Environment variables configured
-
-## Environment
-
-Create a `.env` file in `backend/` with values for:
-
-```env
-DATABASE_URL=postgresql://user:pass@localhost:5432/mydb
-REDIS_URL=redis://localhost:6379
-LLM_PROVIDER=openai  # or aws
-
-# OpenAI settings
-OPENAI_API_KEY=your-openai-key
-OPENAI_BASE_URL=https://api.openai.com/v1
-
-# AWS Bedrock settings (when LLM_PROVIDER=aws)
-# AWS_REGION=us-east-1
-# AWS_ACCESS_KEY_ID=your-aws-access-key-id
-# AWS_SECRET_ACCESS_KEY=your-aws-secret-access-key
-# AWS_SESSION_TOKEN=your-aws-session-token
-# AWS_CREDENTIALS_PROFILE_NAME=your-aws-profile-name
-# AWS_MODEL_PROVIDER=mistral
-# AWS_FAST_MODEL_NAME=mistral.voxtral-mini-3b-2507
-
-LANGFUSE_PUBLIC_KEY=your-langfuse-public-key
-LANGFUSE_SECRET_KEY=your-langfuse-secret-key
-LANGFUSE_BASE_URL=https://api.langfuse.com
-HUGGINGFACE_API_TOKEN=your-huggingface-token
-```
-
-> `REDIS_URL` is required for rate limiting and semantic cache support.
+- Redis instance (required for rate limiting + semantic cache)
+- PostgreSQL database
+- LLM API key (OpenAI-compatible or AWS Bedrock)
+- HuggingFace API token (for semantic cache embeddings)
 
 ## Setup
 
@@ -56,6 +88,9 @@ cd backend
 python -m venv .venv
 source .venv/bin/activate
 python -m pip install -e .
+
+# Configure environment
+cp .env.example .env   # then edit .env
 ```
 
 ## Run
@@ -65,35 +100,105 @@ source .venv/bin/activate
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
+API docs available at `http://localhost:8000/docs`.
+
+## Database Migrations
+
+```bash
+alembic upgrade head
+```
+
+## Environment Variables
+
+Key variables (see `.env.example` for full list):
+
+| Variable | Description | Required |
+|---|---|---|
+| `DATABASE_URL` | PostgreSQL connection string | Yes |
+| `REDIS_URL` | Redis connection string | Yes |
+| `LLM_PROVIDER` | `"openai"` or `"aws"` | Yes |
+| `OPENAI_API_KEY` | OpenAI-compatible API key | If provider=openai |
+| `OPENAI_BASE_URL` | Custom API base URL | Optional |
+| `FAST_MODEL_NAME` | Fast model (default: `poolside/laguna-xs.2`) | Yes |
+| `QUALITY_MODEL_NAME` | Quality model (default: `poolside/laguna-m.1`) | Yes |
+| `EMBEDDING_MODEL_REPO_ID` | Embeddings model (default: `BAAI/bge-base-en-v1.5`) | Yes |
+| `HUGGINGFACE_API_TOKEN` | HuggingFace token for embeddings | Yes |
+| `LANGFUSE_PUBLIC_KEY` | LangFuse observability key | Optional |
+| `LANGFUSE_SECRET_KEY` | LangFuse observability secret | Optional |
+| `ALLOWED_ORIGINS` | CORS origins (comma-separated) | Yes |
+| `ENVIRONMENT` | `"development"` or `"production"` | Yes |
+| `HIDE_DOCS_IN_PRODUCTION` | Hide `/docs` in production | Optional |
+| `ENABLE_SECURITY_HEADERS` | Security response headers | Optional |
+
+AWS Bedrock variables (when `LLM_PROVIDER=aws`): `AWS_REGION`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_CREDENTIALS_PROFILE_NAME`, `AWS_MODEL_PROVIDER`.
+
 ## API Endpoints
 
 ### Resume Tailor
-
-- `POST /api/resume/tailor/stream`
-  - Form fields: `cv_file` (PDF), `job_description`
-  - Returns server-sent events for streaming resume output
-
-- `POST /api/resume/export-pdf`
-  - JSON: `{ "resume_text": "..." }`
-  - Returns generated PDF file
+| Method | Endpoint | Description |
+|---|---|---|
+| POST | `/api/resume/tailor/stream` | Tailor resume (SSE streaming). Fields: `cv_file` (PDF), `job_description` |
+| POST | `/api/resume/export-pdf` | Export resume as PDF. Body: `{ "resume_text": "..." }` |
+| GET | `/api/resume/status` | Service status and configuration |
+| GET | `/api/resume/health` | Liveness probe |
 
 ### Career Assistant
+| Method | Endpoint | Description |
+|---|---|---|
+| POST | `/api/career/cover-letter` | Generate cover letter. Fields: `cv_file`, `job_description` |
+| POST | `/api/career/interview-prep` | Generate interview prep. Fields: `job_description`, optional `cv_file` |
+| GET | `/api/career/status` | Service status |
 
-- `POST /api/career/cover-letter`
-  - Form fields: `cv_file` (PDF), `job_description`
+### General
+| Method | Endpoint | Description |
+|---|---|---|
+| GET | `/health` | Health check |
+| GET | `/api/status` | API status |
 
-- `POST /api/career/interview-prep`
-  - Form fields: `job_description`, optional `cv_file`
+## Service Configuration
 
-### Health & status
+Tunable in `app/api/config.py` (`ServiceConfig`):
 
-- `GET /health`
-- `GET /api/resume/status`
-- `GET /api/career/status`
+| Setting | Default | Description |
+|---|---|---|
+| `MAX_CONCURRENT_REQUESTS` | 10 | Max simultaneous requests |
+| `MAX_CONCURRENT_PDF_PARSING` | 5 | Max concurrent PDF parses |
+| `JD_VALIDATION_TIMEOUT` | 20s | Job description validation timeout |
+| `PDF_PARSING_TIMEOUT` | 60s | PDF extraction timeout |
+| `STREAMING_TIMEOUT` | 300s | Total streaming timeout |
+| `KEEP_ALIVE_TIMEOUT` | 15s | SSE keep-alive interval |
+| `MAX_REQUESTS_PER_CLIENT` | 20 | Rate limit per window |
+| `RATE_LIMIT_WINDOW` | 60s | Rate limit window |
+| `ERROR_THRESHOLD` | 10% | Circuit breaker error threshold |
+| `VALIDATION_CACHE_TTL` | 1h | Validation cache TTL |
 
-## Notes
+## Input Validation
 
-- Resume upload file size is limited to 10 MB.
-- Job descriptions are validated between 50 and 5000 characters.
-- Rate limiting is enforced with Redis, defaulting to 20 requests per client per 60 seconds.
-- Concurrency limits and circuit breaker behavior are defined in `backend/app/api/config.py`.
+- Max file size: **10 MB**
+- Min job description length: **50 characters**
+- Max job description length: **5000 characters**
+- Only PDF files accepted for resume upload
+
+## Database Schema
+
+Three tables:
+- `master_resumes` — Parsed resume data (JSON + plain text)
+- `job_applications` — Links resume to job (company, role, JD, ATS score)
+- `generations` — Generated content (resume/cover_letter/interview_prep)
+
+## LLM Providers
+
+Supports two providers selected via `LLM_PROVIDER`:
+
+- **OpenAI** — Uses `ChatOpenAI` with configurable `base_url` (supports custom endpoints like Poolside.ai)
+- **AWS Bedrock** — Uses `ChatBedrockConverse` with Mistral models
+
+## Semantic Caching
+
+LLM responses are semantically cached using:
+- **Redis** as the cache backend
+- **HuggingFaceEndpointEmbeddings** (`BAAI/bge-base-en-v1.5`) for embedding
+- **Distance threshold**: 0.7
+- **TTL**: 8 hours
+
+Cached operations: JD validation, JD parsing, CV analysis, resume tailoring, cover letters, interview prep.
