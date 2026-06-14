@@ -162,3 +162,4 @@ temp/
 # frontend/package-lock.json
 # frontend/yarn.lock
 # backend/uv.lock
+backend/chat_sessions/
