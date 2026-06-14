@@ -35,6 +35,24 @@ class Settings(BaseSettings):
     EMBEDDING_MODEL_REPO_ID: str = "BAAI/bge-base-en-v1.5"
 
     # ═════════════════════════════════════════════════════════════
+    # TOKEN & COST LIMITS
+    # ═════════════════════════════════════════════════════════════
+
+    # Max output tokens per LLM response
+    FAST_MODEL_MAX_TOKENS: int = 4096
+    QUALITY_MODEL_MAX_TOKENS: int = 8192
+    AGENT_MAX_TOKENS: int = 4096       # Max tokens for agent-style responses
+    COVER_LETTER_MAX_TOKENS: int = 2048
+    INTERVIEW_PREP_MAX_TOKENS: int = 4096
+
+    # Max context window safety limit (total input + output)
+    # Prevents runaway token usage on models with large context
+    MAX_CONTEXT_TOKENS: int = 32000
+
+    # Token budget per conversation thread (for cost control)
+    THREAD_TOKEN_BUDGET: int = 64000   # Hard ceiling per session
+
+    # ═════════════════════════════════════════════════════════════
     # SECURITY & CORS CONFIGURATION
     # ═════════════════════════════════════════════════════════════
     
@@ -42,9 +60,6 @@ class Settings(BaseSettings):
     # In production, set to your actual frontend domain
     # Example: "https://example.com" or comma-separated list
     ALLOWED_ORIGINS: str = "http://localhost:5173,http://localhost:3000"
-    
-    # Security - Hide Swagger/OpenAPI docs in production
-    HIDE_DOCS_IN_PRODUCTION: bool = True
     
     # Security - Enable/disable various security headers
     ENABLE_SECURITY_HEADERS: bool = True

@@ -7,7 +7,6 @@ Provides both sync and async APIs, structured results, caching, and configurable
 import time
 import logging
 from dataclasses import dataclass, field
-from functools import lru_cache
 from typing import Optional
 from pathlib import Path
 
@@ -218,49 +217,6 @@ class PDFParsingService:
         return result
 
     # ------------------------------------------------------------------
-    # Public API – Async
-    # ------------------------------------------------------------------
-
-    @staticmethod
-    async def aextract_text_from_pdf(
-        pdf_path: str,
-        max_pages: int = DEFAULT_MAX_PAGES,
-        min_text_length: int = DEFAULT_MIN_TEXT_LENGTH,
-    ) -> str:
-        """
-        Async version of :meth:`extract_text_from_pdf`.
-
-        Runs the synchronous extraction in a thread pool so it doesn't
-        block the event loop.
-        """
-        import asyncio
-
-        return await asyncio.to_thread(
-            PDFParsingService.extract_text_from_pdf,
-            pdf_path,
-            max_pages,
-            min_text_length,
-        )
-
-    @staticmethod
-    async def aextract(
-        pdf_path: str,
-        max_pages: int = DEFAULT_MAX_PAGES,
-        min_text_length: int = DEFAULT_MIN_TEXT_LENGTH,
-    ) -> PDFExtractionResult:
-        """
-        Async version of :meth:`extract`.
-        """
-        import asyncio
-
-        return await asyncio.to_thread(
-            PDFParsingService.extract,
-            pdf_path,
-            max_pages,
-            min_text_length,
-        )
-
-    # ------------------------------------------------------------------
     # Validation
     # ------------------------------------------------------------------
 
@@ -288,38 +244,6 @@ class PDFParsingService:
         except Exception as exc:
             logger.error("Unexpected PDF validation error: %s", exc)
             return False
-
-    @staticmethod
-    async def avalidate_pdf_file(file_path: str) -> bool:
-        """Async version of :meth:`validate_pdf_file`."""
-        import asyncio
-        return await asyncio.to_thread(PDFParsingService.validate_pdf_file, file_path)
-
-    # ------------------------------------------------------------------
-    # Cached extraction (for repeated reads of the same file)
-    # ------------------------------------------------------------------
-
-    @staticmethod
-    @lru_cache(maxsize=32)
-    def extract_text_cached(pdf_path: str, max_pages: int = DEFAULT_MAX_PAGES) -> str:
-        """
-        LRU-cached version of :meth:`extract_text_from_pdf`.
-
-        Use this when the same PDF file may be requested multiple times
-        in the same process (e.g. during development / testing).
-        The cache key includes *max_pages* but not *min_text_length*.
-
-        Note: large PDFs (>5 MB) are not cached.
-        """
-        path = Path(pdf_path)
-        if path.stat().st_size > MAX_FILE_SIZE_FOR_CACHE_MB * 1024 * 1024:
-            logger.debug("File too large for cache (%s), skipping", path.name)
-            return PDFParsingService.extract_text_from_pdf(
-                pdf_path, max_pages, min_text_length=0
-            )
-        return PDFParsingService.extract_text_from_pdf(
-            pdf_path, max_pages, min_text_length=0
-        )
 
     # ------------------------------------------------------------------
     # Internal helpers

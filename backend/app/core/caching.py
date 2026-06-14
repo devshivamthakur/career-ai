@@ -3,7 +3,6 @@ Semantic Caching Configuration
 Initializes and configures the Redis-based semantic cache for LLM calls.
 """
 import logging
-import langchain
 from typing import Optional, List, Any
 from langchain_core.caches import BaseCache
 from app.core.config import settings

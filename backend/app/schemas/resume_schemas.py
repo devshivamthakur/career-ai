@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field, constr
-from typing import TypedDict as TypeDict
+from typing import Optional
 
 # Pydantic model for the result of job description validation
 class JDValidationResult(BaseModel):
@@ -13,31 +13,51 @@ class SkillsComparisonResult(BaseModel):
     skills_comparison: str = Field(description="Detailed text comparison of skills")
     matched_skills: list[str] = Field(description="List of matched skills between resume and JD")
     missing_skills: list[str] = Field(description="List of skills required by JD but missing in resume")
-    ats_score: int = Field(description="An ATS matching score between 0 and 100 representing how well the original resume matches the job description")
-
-# Define the state schema for the graph
-class ResumeTailorState(TypeDict):
-    """State object for the resume tailoring workflow."""
-    cv_text: str
-    job_description: str
-    jd_analysis: str = ""
-    cv_analysis: str = ""
-    skills_comparison: str = ""
-    matched_skills: list[str] = []
-    missing_skills: list[str] = []
-    ats_score: int = 0
-    tailored_resume: str = ""
-    final_resume: str = ""
-    error: str = None
+    ats_score: int = Field(default=0, description="An ATS matching score between 0 and 100 representing how well the original resume matches the job description")
 
 
 class ResumeExportRequest(BaseModel):
     resume_text: constr(strip_whitespace=True, min_length=50, max_length=100000)
 
 
+# ── Career Cover Letter ─────────────────────────────────────
+
+class CoverLetterRequest(BaseModel):
+    job_description: str = Field(..., min_length=50, max_length=5000)
+    company: str = Field(..., min_length=1)
+    role: str = Field(..., min_length=1)
+    resume_text: Optional[str] = None
+
+
 class CoverLetterResponse(BaseModel):
     cover_letter: str
 
 
+# ── Career Interview Prep ───────────────────────────────────
+
+class StarAnswer(BaseModel):
+    situation: str
+    task: str
+    action: str
+    result: str
+
+
+class InterviewQuestion(BaseModel):
+    question: str
+    star_answer: StarAnswer
+
+
+class InterviewPrepRequest(BaseModel):
+    job_description: str = Field(..., min_length=50, max_length=5000)
+    role: str = Field(..., min_length=1)
+    company: Optional[str] = None
+    resume_text: Optional[str] = None
+
+
 class InterviewPrepResponse(BaseModel):
-    interview_prep: str
+    questions: list[InterviewQuestion]
+
+
+class InterviewQuestions(BaseModel):
+    """Wrapper for structured LLM output of interview questions."""
+    questions: list[InterviewQuestion]

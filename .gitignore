@@ -83,6 +83,9 @@ backend/*.db
 backend/*.sqlite
 backend/alembic/__pycache__/
 
+# Chat sessions (JSON storage)
+backend/chat_sessions/
+
 # Uvicorn / FastAPI logs
 *.log
 

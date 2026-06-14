@@ -1,0 +1,18 @@
+{
+  "id": "string",
+  "created_at": "2026-06-14T05:14:56.376879+00:00",
+  "updated_at": "2026-06-14T05:14:58.278345+00:00",
+  "messages": [
+    {
+      "role": "user",
+      "content": "string",
+      "timestamp": "2026-06-14T05:14:56.377437+00:00"
+    },
+    {
+      "role": "assistant",
+      "content": "Hello! It looks like you shared a couple of empty strings. Could you clarify what you'd like me to assist you with? Here are a few ways I can help:\n\n### **I Can Help You With:**\n1. **Resume Optimization** \ud83c\udfaf\n   - Upload your resume (PDF), and I\u2019ll tailor it to match a specific job description.\n   - Get an ATS (Applicant Tracking System) score and recommendations to improve your chances.\n\n2. **Cover Letter Writing** \u270d\ufe0f\n   - Provide a job description, and I\u2019ll craft a compelling cover letter tailored to the role.\n\n3. **Interview Preparation** \ud83d\udde3\ufe0f\n   - Get STAR-format answers for common interview questions based on the job description.\n\n4. **Skills Gap Analysis** \ud83d\udcca\n   - Compare your resume against a job description to identify missing skills and how to address them.",
+      "timestamp": "2026-06-14T05:14:58.278326+00:00"
+    }
+  ],
+  "summary": ""
+}

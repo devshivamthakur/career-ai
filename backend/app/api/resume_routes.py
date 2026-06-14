@@ -9,11 +9,10 @@ Architecture:
   - Clear separation of concerns for scalability
 """
 
-from fastapi import APIRouter, UploadFile, File, Form, HTTPException, status, Request, BackgroundTasks
+from fastapi import APIRouter, UploadFile, File, Form, HTTPException, status, Request
 from fastapi.responses import StreamingResponse
 import logging
 from typing import AsyncGenerator, Optional
-from contextlib import suppress
 from datetime import datetime
 import asyncio
 
@@ -21,19 +20,16 @@ from app.schemas.resume_schemas import ResumeExportRequest
 from app.services.pdf_export import PDFExportService
 from app.agents.resume_tailor import ResumeTailorAgent
 from app.core.config import settings
-from app.utils import MAX_JOB_DESCRIPTION_LENGTH, MIN_JOB_DESCRIPTION_LENGTH, MAX_FILE_SIZE_MB, STREAM_DELAY
+from app.utils import MAX_JOB_DESCRIPTION_LENGTH, MIN_JOB_DESCRIPTION_LENGTH, MAX_FILE_SIZE_MB
 
 # Import from API infrastructure
-from app.api.config import (
+from app.core.infrastructure import (
     ServiceConfig,
     circuit_breaker,
-    concurrency_mgr
+    concurrency_mgr,
 )
-from app.api.services import (
-    ResumeTailorService,
-    generate_request_id,
-    cleanup_temp_file
-)
+from app.services.resume_tailor_service import ResumeTailorService
+from app.utils.helpers import generate_request_id
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/resume", tags=["resume"])
@@ -100,14 +96,13 @@ def _check_concurrency() -> None:
 )
 async def tailor_resume_stream(
     request: Request,
-    cv_file: UploadFile = File(..., description="Resume/CV PDF file"),
+    resume_pdf: UploadFile = File(..., description="Resume/CV PDF file"),
     job_description: str = Form(
         ...,
         min_length=MIN_JOB_DESCRIPTION_LENGTH,
         max_length=MAX_JOB_DESCRIPTION_LENGTH,
         description="Target job description"
     ),
-    background_tasks: BackgroundTasks = BackgroundTasks()
 ):
     """
     Production-grade resume tailoring endpoint with streaming.
@@ -156,7 +151,7 @@ async def tailor_resume_stream(
             
             logger.info(f"Request {request_id}: Validating and preparing inputs")
             cleaned_jd, cv_text = await resume_tailor_service.validate_and_prepare(
-                job_description, cv_file
+                job_description, resume_pdf
             )
             
             logger.info(f"Request {request_id}: Inputs validated, starting stream")
@@ -198,7 +193,7 @@ async def tailor_resume_stream(
                             break
                         except Exception as e:
                             logger.error(f"Request {request_id}: Stream error - {str(e)}")
-                            from app.api.services import sse_event
+                            from app.utils.sse import sse_event
                             yield sse_event("error", {
                                 "error": str(e),
                                 "success": False
@@ -390,29 +385,4 @@ async def health_check():
     return {"status": "healthy"}
 
 
-# ═══════════════════════════════════════════════════════════════════════
-# BACKGROUND TASKS
-# ═══════════════════════════════════════════════════════════════════════
 
-async def cleanup_expired_cache() -> None:
-    """
-    Periodic background task to clean up expired cache entries.
-    Should be called periodically (e.g., every 5 minutes via APScheduler).
-    """
-    while True:
-        try:
-            await asyncio.sleep(300)  # 5 minutes
-            logger.debug("Cache cleanup completed")
-        except Exception as e:
-            logger.exception(f"Cache cleanup error: {str(e)}")
-
-
-# Optional: Add to lifespan event if using FastAPI with lifespan context
-# from contextlib import asynccontextmanager
-# @asynccontextmanager
-# async def lifespan(app: FastAPI):
-#     # Startup
-#     cleanup_task = asyncio.create_task(cleanup_expired_cache())
-#     yield
-#     # Shutdown
-#     cleanup_task.cancel()
