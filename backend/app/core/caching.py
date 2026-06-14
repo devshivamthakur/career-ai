@@ -81,7 +81,7 @@ def initialize_semantic_cache():
 
         # Initialize the underlying Redis semantic cache
         redis_cache = RedisSemanticCache(
-            redis_url=settings.REDIS_URL,
+            redis_url=settings.resolved_redis_url,
             embeddings=embeddings,
             distance_threshold=0.7, # Lower threshold for broader matching
             ttl=60 * 60 * 8, # Cache entries expire after 8 hours

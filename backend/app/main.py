@@ -23,7 +23,6 @@ initialize_semantic_cache()
 def _get_request_id(request: Request) -> str:
     return getattr(request.state, "request_id", "unknown")
 
-
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
     request_id = _get_request_id(request)
     logger.warning("Request %s: request validation failed: %s", request_id, exc)
@@ -31,7 +30,6 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
         status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
         content={"detail": exc.errors(), "request_id": request_id},
     )
-
 
 async def http_exception_handler(request: Request, exc: StarletteHTTPException):
     request_id = _get_request_id(request)
@@ -41,7 +39,6 @@ async def http_exception_handler(request: Request, exc: StarletteHTTPException):
         return JSONResponse(status_code=exc.status_code, content=content, headers=exc.headers)
     return JSONResponse(status_code=exc.status_code, content=content)
 
-
 async def unexpected_exception_handler(request: Request, exc: Exception):
     request_id = _get_request_id(request)
     logger.exception("Request %s: unhandled exception: %s", request_id, exc)
@@ -49,7 +46,6 @@ async def unexpected_exception_handler(request: Request, exc: Exception):
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
         content={"detail": "Internal server error", "request_id": request_id},
     )
-
 
 def _parse_allowed_origins() -> list[str]:
     """Parse ALLOWED_ORIGINS from settings string"""
@@ -67,7 +63,6 @@ def _parse_allowed_origins() -> list[str]:
     
     logger.info("Configured CORS origins: %s", origins)
     return origins
-
 
 def _add_security_headers_middleware(app: FastAPI) -> None:
     """Add security headers to all responses"""
@@ -109,7 +104,6 @@ def _add_security_headers_middleware(app: FastAPI) -> None:
                 del response.headers["Server"]
         
         return response
-
 
 def get_application() -> FastAPI:
     """

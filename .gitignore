@@ -84,7 +84,7 @@ backend/*.sqlite
 backend/alembic/__pycache__/
 
 # Chat sessions (JSON storage)
-backend/chat_sessions/
+backend/app/chat_sessions/
 
 # Uvicorn / FastAPI logs
 *.log
@@ -162,4 +162,4 @@ temp/
 # frontend/package-lock.json
 # frontend/yarn.lock
 # backend/uv.lock
-backend/chat_sessions/
+backend/app/chat_sessions/

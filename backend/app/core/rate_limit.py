@@ -28,7 +28,7 @@ def _get_client_ip(request: Request) -> str:
     return request.client.host
 
 
-redis_client = Redis.from_url(settings.REDIS_URL, encoding="utf-8", decode_responses=True)
+redis_client = Redis.from_url(settings.resolved_redis_url, encoding="utf-8", decode_responses=True)
 
 
 def _format_key(client_id: str) -> str:

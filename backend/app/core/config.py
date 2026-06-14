@@ -14,7 +14,16 @@ class Settings(BaseSettings):
     DATABASE_URL: str
 
     # Redis Cache
+    REDIS_HOST: Optional[str] = None
+    REDIS_PORT: int = 6379
     REDIS_URL: str = "redis://localhost:6379"
+
+    @property
+    def resolved_redis_url(self) -> str:
+        """Return the effective Redis URL, using REDIS_HOST if provided."""
+        if self.REDIS_HOST:
+            return f"redis://{self.REDIS_HOST}:{self.REDIS_PORT}"
+        return self.REDIS_URL
     
     # API Keys & Models
     OPENAI_API_KEY: Optional[str] = None

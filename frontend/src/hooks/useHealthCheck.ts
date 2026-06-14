@@ -2,7 +2,7 @@ import { useEffect } from 'react';
 import { useUiStore } from '../stores/uiStore';
 import { checkHealth } from '../api/client';
 
-const POLL_INTERVAL = 30000; // 30 seconds
+const POLL_INTERVAL = 60*1000; // 30 seconds
 
 export function useHealthCheck() {
   const setBackendHealth = useUiStore((s) => s.setBackendHealth);
