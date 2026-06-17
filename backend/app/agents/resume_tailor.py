@@ -1,486 +1,356 @@
 """
-LangGraph + True Token Streaming
-================================
-
-This implementation:
-- Uses LangGraph properly
-- Streams token-by-token
-- Reduces latency
-- Uses astream_events()
-- Streams during node execution
-- Production ready
+Resume Tailor Agent – simple step-by-step orchestration.
+Uses plain async functions instead of LangGraph StateGraph.
 """
 
 import asyncio
-import logging
 import json
-import hashlib
-from typing import (
-    TypedDict,
-    AsyncGenerator,
-    Dict,
-    Any,
-)
-
-from langgraph.graph import (
-    StateGraph,
-    END,
-    START,
-)
+import logging
+from typing import AsyncGenerator, Any
 
 from app.core.llm import build_chat_model
 
-from langchain_core.messages import (
-    AIMessageChunk,
-)
-from langchain_core.messages import (
-    HumanMessage,
-)
+from langchain_core.messages import HumanMessage
 from langchain_core.output_parsers import PydanticOutputParser
-
-
-from app.core.config import settings
 from langchain_core.outputs import Generation
 
-from app.prompts.resume_tailoring_prompts import (
-    PARSE_JD_PROMPT,
-    EXTRACT_SKILLS_PROMPT,
-    COMPARE_SKILLS_PROMPT,
-    REWRITE_RESUME_PROMPT,
-    POLISH_RESUME_PROMPT,
-    VALIDATE_JD_PROMPT,
-)
-from app.schemas.resume_schemas import JDValidationResult, ResumeTailorState, SkillsComparisonResult
+from app.core.config import settings
+from app.prompts.jd_parsing_prompts import PARSE_JD_PROMPT
+from app.prompts.skills_prompts import EXTRACT_SKILLS_PROMPT, COMPARE_SKILLS_PROMPT
+from app.prompts.resume_prompts import REWRITE_RESUME_PROMPT, POLISH_RESUME_PROMPT
+from app.prompts.validation_prompts import VALIDATE_JD_PROMPT
+from app.schemas.resume_schemas import JDValidationResult, SkillsComparisonResult
 from app.core.caching import get_cache
+from app.utils import build_langfuse_callbacks
 
 logger = logging.getLogger(__name__)
 
 
-def _build_langfuse_callbacks():
-    callbacks = []
-    if not (
-        settings.LANGFUSE_PUBLIC_KEY
-        or settings.LANGFUSE_SECRET_KEY
-    ):
-        return callbacks
-
-    try:
-        import os
-
-        if settings.LANGFUSE_BASE_URL:
-            os.environ.setdefault("LANGFUSE_BASE_URL", settings.LANGFUSE_BASE_URL)
-        if settings.LANGFUSE_PUBLIC_KEY:
-            os.environ.setdefault("LANGFUSE_PUBLIC_KEY", settings.LANGFUSE_PUBLIC_KEY)
-        if settings.LANGFUSE_SECRET_KEY:
-            os.environ.setdefault("LANGFUSE_SECRET_KEY", settings.LANGFUSE_SECRET_KEY)
-
-        from langfuse.langchain import CallbackHandler
-
-        callbacks.append(CallbackHandler())
-        logger.info("LangFuse callback handler enabled for ResumeTailorAgent")
-    except Exception as exc:
-        logger.warning("Could not initialize LangFuse tracer: %s", exc)
-
-    return callbacks
-
-
-# =========================================================
-# STATE
-# =========================================================
-
-# =========================================================
-# AGENT
-# =========================================================
-
 class ResumeTailorAgent:
+    """
+    Orchestrates resume tailoring by calling LLM steps in sequence.
+    No LangGraph – just plain async functions.
+    """
 
     def __init__(self):
-
-        # =================================================
-        # FAST MODEL
-        # =================================================
-
-        callbacks = _build_langfuse_callbacks()
-
+        callbacks = build_langfuse_callbacks("ResumeTailorAgent")
         self.structure_llm = build_chat_model(streaming=False, callbacks=callbacks)
         self.helper_llm = build_chat_model(streaming=False, callbacks=callbacks)
+        self.streaming_llm = build_chat_model(
+            streaming=True,
+            callbacks=callbacks,
+            max_tokens=settings.AGENT_MAX_TOKENS,
+        )
         self.cacheInstance = get_cache()
-
-        # =================================================
-        # QUALITY MODEL
-        # =================================================
-
-        self.graph = self._build_graph()
         self.jdvalidation_parser = PydanticOutputParser(pydantic_object=JDValidationResult)
-
-    @staticmethod
-    def _hash_input(text: str) -> str:
-        """Generate hash for caching input."""
-        return hashlib.sha256(text.encode()).hexdigest()
+        self.skillscomparison_parser = PydanticOutputParser(pydantic_object=SkillsComparisonResult)
 
     @staticmethod
     def _extract_text_from_response(response: Any) -> str:
-        """Normalizes LLM response payloads to plain text."""
         if hasattr(response, "content"):
             content = response.content
             if isinstance(content, list):
-                texts = []
-                for item in content:
-                    if isinstance(item, dict):
-                        texts.append(str(item.get("text", "")))
-                    elif hasattr(item, "text"):
-                        texts.append(str(item.text))
-                    else:
-                        texts.append(str(item))
+                texts = [str(item.get("text", "")) if isinstance(item, dict) else str(item) for item in content]
                 return "".join(texts)
             return str(content)
-
         if hasattr(response, "generations"):
-            generations = response.generations
-            if generations and len(generations) > 0:
-                first_gen = generations[0]
-                if isinstance(first_gen, list) and len(first_gen) > 0:
-                    return str(getattr(first_gen[0], "text", ""))
-                return str(getattr(first_gen, "text", ""))
-
+            gens = response.generations
+            if gens and len(gens) > 0:
+                first = gens[0]
+                if isinstance(first, list) and len(first) > 0:
+                    return str(getattr(first[0], "text", ""))
+                return str(getattr(first, "text", ""))
         return str(response)
 
-    # =====================================================
-    # BUILD GRAPH
-    # =====================================================
-    async def validate_job_description(
-    self,
-    job_description: str
-) -> tuple[bool, str]:
-
-        """
-        Validate JD using structured output with caching.
-        """
+    async def validate_job_description(self, job_description: str) -> tuple[bool, str]:
         prompt = job_description
         llm_string = f"validate_jd_{settings.FAST_MODEL_NAME}"
-
         if self.cacheInstance:
-            cached_result = await self.cacheInstance.alookup(prompt, llm_string)
-            if cached_result:
-                logger.info("Semantic cache hit for validate_job_description.")
+            cached = await self.cacheInstance.alookup(prompt, llm_string)
+            if cached:
                 try:
-                    is_valid, reason = json.loads(cached_result[0].text)
+                    is_valid, reason = json.loads(cached[0].text)
                     return is_valid, reason
                 except (json.JSONDecodeError, IndexError, TypeError):
-                    logger.warning("Failed to parse cached validation result. Re-running validation.")
-
+                    pass
         try:
-
-            structured_llm = (
-                self.structure_llm
-                | self.jdvalidation_parser
+            structured_llm = self.structure_llm | self.jdvalidation_parser
+            prompt_text = VALIDATE_JD_PROMPT.format(
+                job_description=job_description,
+                output_format=self.jdvalidation_parser.get_format_instructions(),
             )
-
-            prompt_text = (
-                VALIDATE_JD_PROMPT.format(
-                    job_description=job_description,
-                    output_format=self.jdvalidation_parser.get_format_instructions(),
-                )
-            )
-
-            messages = [
-                HumanMessage(content=prompt_text)
-            ]
-
-            validation_result = (
-                await structured_llm.ainvoke(
-                    messages
-                )
-            )
-
-            logger.info(
-                f"JD Validation Result: {validation_result}"
-            )
-
-            is_valid, reason = validation_result.is_valid, validation_result.reason
-
+            result = await structured_llm.ainvoke([HumanMessage(content=prompt_text)])
+            is_valid, reason = result.is_valid, result.reason
             if self.cacheInstance:
-                result_str = json.dumps([is_valid, reason])
-                self.cacheInstance.aupdate(prompt, llm_string, [Generation(text=result_str)])
-                logger.info("Semantic cache updated for validate_job_description.")
-
+                self.cacheInstance.aupdate(prompt, llm_string, [Generation(text=json.dumps([is_valid, reason]))])
             return is_valid, reason
-
         except Exception as e:
+            logger.exception("JD validation failed: %s", e)
+            return False, "Failed to validate job description"
 
-            logger.exception(
-                f"JD validation failed: {str(e)}"
-            )
+    # ── Step functions (called sequentially) ─────────────────────
 
-            return (
-                False,
-                "Failed to validate job description",
-            )
-
-
-    def _build_graph(self):
-
-        workflow = StateGraph(
-            ResumeTailorState
-        )
-
-        workflow.add_node(
-            "parallel_analyze",
-            self._parallel_analyze,
-        )
-
-        workflow.add_node(
-            "compare_skills",
-            self._compare_skills,
-        )
-
-        workflow.add_node(
-            "rewrite_resume",
-            self._rewrite_resume,
-        )
-
-        workflow.add_node(
-            "polish_resume",
-            self._polish_resume,
-        )
-
-        workflow.add_edge(
-            START,
-            "parallel_analyze",
-        )
-
-        workflow.add_edge(
-            "parallel_analyze",
-            "compare_skills",
-        )
-
-        workflow.add_edge(
-            "compare_skills",
-            "rewrite_resume",
-        )
-
-        workflow.add_edge(
-            "rewrite_resume",
-            "polish_resume",
-        )
-
-        workflow.add_edge(
-            "polish_resume",
-            END,
-        )
-
-        return workflow.compile()
-
-    # =====================================================
-    # NODES
-    # =====================================================
-
-    async def _parallel_analyze(
-        self,
-        state: ResumeTailorState,
-    ) -> Dict[str, Any]:
-        """Parse JD and analyze CV in parallel for speed with caching."""
-        logger.info("Starting parallel analysis...")
-        
+    async def parallel_analyze(self, cv_text: str, job_description: str) -> dict:
         async def parse_jd():
-            prompt = PARSE_JD_PROMPT.format(job_description=state["job_description"])
-            llm_string = f"parse_jd_{settings.FAST_MODEL_NAME}"
+            p = PARSE_JD_PROMPT.format(job_description=job_description)
+            ls = f"parse_jd_{settings.FAST_MODEL_NAME}"
             if self.cacheInstance:
-                cached = await self.cacheInstance.alookup(prompt, llm_string)
-                if cached:
-                    logger.info("Semantic cache hit for parse_jd.")
-                    return cached[0].text
-            
-            response = await self.helper_llm.ainvoke(prompt)
-            result = self._extract_text_from_response(response)
-            
+                c = await self.cacheInstance.alookup(p, ls)
+                if c:
+                    return c[0].text
+            r = await self.helper_llm.ainvoke(p)
+            t = self._extract_text_from_response(r)
             if self.cacheInstance:
-                self.cacheInstance.aupdate(prompt, llm_string, [Generation(text=result)])
-            return result
-        
+                self.cacheInstance.aupdate(p, ls, [Generation(text=t)])
+            return t
+
         async def analyze_cv():
-            prompt = EXTRACT_SKILLS_PROMPT.format(resume_text=state["cv_text"])
-            llm_string = f"analyze_cv_{settings.FAST_MODEL_NAME}"
+            p = EXTRACT_SKILLS_PROMPT.format(resume_text=cv_text)
+            ls = f"analyze_cv_{settings.FAST_MODEL_NAME}"
             if self.cacheInstance:
-                cached = await self.cacheInstance.alookup(prompt, llm_string)
-                if cached:
-                    logger.info("Semantic cache hit for analyze_cv.")
-                    return cached[0].text
-
-            response = await self.helper_llm.ainvoke(prompt)
-            result = self._extract_text_from_response(response)
-
+                c = await self.cacheInstance.alookup(p, ls)
+                if c:
+                    return c[0].text
+            r = await self.helper_llm.ainvoke(p)
+            t = self._extract_text_from_response(r)
             if self.cacheInstance:
-                self.cacheInstance.aupdate(prompt, llm_string, [Generation(text=result)])
-            return result
-        
-        # Run both in parallel
-        jd_analysis, cv_analysis = await asyncio.gather(
-            parse_jd(),
-            analyze_cv(),
-        )
-        
-        logger.info("Parallel analysis completed.")
-        return {
-            "jd_analysis": jd_analysis,
-            "cv_analysis": cv_analysis,
-        }
+                self.cacheInstance.aupdate(p, ls, [Generation(text=t)])
+            return t
 
-    async def _compare_skills(
-        self,
-        state: ResumeTailorState,
-    ) ->Dict[str, Any]:
-        logger.info("Comparing skills...")
-        
-        structured_llm = self.structure_llm.with_structured_output(SkillsComparisonResult)
+        jd_analysis, cv_analysis = await asyncio.gather(parse_jd(), analyze_cv())
+        return {"jd_analysis": jd_analysis, "cv_analysis": cv_analysis}
 
+    async def compare_skills(self, jd_analysis: str, cv_analysis: str) -> dict:
         prompt = COMPARE_SKILLS_PROMPT.format(
-            job_requirements=state["jd_analysis"],
-            user_profile=state["cv_analysis"],
+            job_requirements=jd_analysis,
+            user_profile=cv_analysis,
+            output_format=self.skillscomparison_parser.get_format_instructions(),
         )
-
-        response = await structured_llm.ainvoke(
-            prompt
-        )
-
+        try:
+            structured = self.structure_llm | self.skillscomparison_parser
+            response = await structured.ainvoke(prompt)
+        except Exception:
+            logger.warning("Pydantic parsing failed, retrying with manual fence stripping")
+            raw = self._extract_text_from_response(
+                await self.structure_llm.ainvoke(prompt)
+            )
+            # Strip markdown code fences that confuse LangChain's parser
+            cleaned = raw.strip()
+            if cleaned.startswith("```json"):
+                cleaned = cleaned[7:]
+            elif cleaned.startswith("```"):
+                cleaned = cleaned[3:]
+            if cleaned.endswith("```"):
+                cleaned = cleaned[:-3]
+            cleaned = cleaned.strip()
+            response = self.skillscomparison_parser.parse(cleaned)
         return {
             "skills_comparison": response.skills_comparison,
             "matched_skills": response.matched_skills,
             "missing_skills": response.missing_skills,
-            "ats_score": response.ats_score
+            "ats_score": response.ats_score,
         }
 
-    async def _rewrite_resume(
-        self,
-        state: ResumeTailorState,
-    ) -> Dict[str, Any]:
-
-        logger.info("Rewriting resume...")
-
-        prompt = REWRITE_RESUME_PROMPT.format(
-            resume_text=state["cv_text"],
-            job_description=state["job_description"],
-            analysis=state["skills_comparison"],
+    async def rewrite_resume(self, cv_text: str, job_description: str, analysis: str) -> str:
+        prompt = REWRITE_RESUME_PROMPT.format(resume_text=cv_text, job_description=job_description, analysis=analysis)
+        response = await self.helper_llm.ainvoke(prompt)
+        return self._strip_analysis_leakage(
+            self._extract_text_from_response(response).removesuffix("</assistant>")
         )
 
-        response = await self.helper_llm.ainvoke(
-            prompt
+    async def polish_resume(self, tailored_resume: str, job_description: str) -> str:
+        prompt = POLISH_RESUME_PROMPT.format(tailored_resume=tailored_resume, job_description=job_description)
+        response = await self.helper_llm.ainvoke(prompt)
+        return self._strip_analysis_leakage(
+            self._extract_text_from_response(response).removesuffix("</assistant>")
         )
 
+    # ── Full pipeline (non-streaming) ────────────────────────────
+
+    async def run_full_pipeline(self, cv_text: str, job_description: str) -> dict:
+        analysis = await self.parallel_analyze(cv_text, job_description)
+        skills = await self.compare_skills(analysis["jd_analysis"], analysis["cv_analysis"])
+        tailored = await self.rewrite_resume(cv_text, job_description, skills["skills_comparison"])
+        final = await self.polish_resume(tailored, job_description)
         return {
-            "tailored_resume": self._extract_text_from_response(response).removesuffix("</assistant>")
+            "final_resume": final,
+            "matched_skills": skills["matched_skills"],
+            "missing_skills": skills["missing_skills"],
+            "ats_score": skills["ats_score"],
         }
 
-    async def _polish_resume(
-        self,
-        state: ResumeTailorState,
-    ) -> Dict[str, Any]:
+    # ── Post-processing ──────────────────────────────────────────
 
-        logger.info("Polishing resume...")
+    @staticmethod
+    def _strip_analysis_leakage(text: str) -> str:
+        """Remove any leaked analysis labels / metadata from the final resume.
 
-        prompt = POLISH_RESUME_PROMPT.format(
-            tailored_resume=state["tailored_resume"],
-            job_description=state["job_description"],
-        )
+        The LLM sometimes echoes the analysis section labels (matched_skills,
+        missing_skills, skills_comparison, ats_score, etc.) into the resume
+        output.  This post-processing step strips those lines.
+        """
+        forbidden_labels = [
+            "matched_skills",
+            "missing_skills",
+            "skills_comparison",
+            "ats_score",
+            "gap & alignment analysis",
+            "for reference only",
+        ]
 
-        response = await self.helper_llm.ainvoke(
-            prompt
-        )
+        lines = text.split("\n")
+        clean = []
+        for line in lines:
+            lower = line.strip().lower()
+            # Skip lines that match or are dominated by forbidden labels
+            if any(label in lower for label in forbidden_labels):
+                continue
+            # Skip lines containing forbidden keys
+            if any(label in line for label in ["matched_skills", "missing_skills", "skills_comparison", "ats_score"]):
+                continue
+            clean.append(line)
 
-        return {
-            "final_resume": self._extract_text_from_response(response).removesuffix("</assistant>")
-        }
+        cleaned = "\n".join(clean).strip()
+        # Remove leading/trailing blank lines
+        return cleaned.strip()
 
-    # =====================================================
-    # TRUE TOKEN STREAMING WITH LANGGRAPH
-    # =====================================================
+    # ── Streaming helpers ──────────────────────────────────────
+
+    async def _stream_llm_response(
+        self, prompt: str
+    ) -> AsyncGenerator[str, None]:
+        """Stream an LLM response token by token, yielding SSE token events."""
+        try:
+            async for chunk in self.streaming_llm.astream(prompt):
+                content = ""
+                if hasattr(chunk, "content"):
+                    raw = chunk.content or ""
+                    if isinstance(raw, list):
+                        # AIMessageChunk.content can be a list of content blocks
+                        texts = [
+                            str(item.get("text", ""))
+                            if isinstance(item, dict)
+                            else str(item)
+                            for item in raw
+                        ]
+                        content = "".join(texts)
+                    else:
+                        content = raw
+                elif isinstance(chunk, str):
+                    content = chunk
+                if content:
+                    yield json.dumps({
+                        "type": "token",
+                        "content": content,
+                    }) + "\n"
+        except Exception as e:
+            logger.exception("Token streaming failed")
+            yield json.dumps({
+                "type": "token",
+                "content": f"\n\n[Stream error: {e}]",
+            }) + "\n"
+
+    # ── Streaming (emits step + token events) ──────────────────
 
     async def astream_tailored_resume(
-        self,
-        cv_text: str,
-        job_description: str,
+        self, cv_text: str, job_description: str
     ) -> AsyncGenerator[str, None]:
-
         """
-        Stream only critical outputs (skills comparison + final resume).
-        Skips intermediate analysis steps for faster UX.
-        
-        Optimization:
-        - Parallel execution of JD parsing and CV analysis
-        - Filtered output: only compare_skills and polish_resume
-        - Faster perceived performance
+        Stream tailored resume with token-level events during LLM generation.
+
+        Yields JSON lines:
+          - ``{"type": "step_start", ...}``
+          - ``{"type": "token", "content": "..."}``  (token-by-token)
+          - ``{"type": "step_end", ...}``
+          - ``{"type": "complete", ...}``
+          - ``{"type": "error", ...}``
         """
-
-        initial_state = {
-            "cv_text": cv_text,
-            "job_description": job_description,
-        }
-
         try:
-            logger.info("Starting resume tailoring stream (parallel optimized)...")
+            # ── Parallel analysis (no streaming needed) ──────────
+            analysis = await self.parallel_analyze(cv_text, job_description)
 
-            async for event in self.graph.astream_events(
-                initial_state,
-                version="v2",
-            ):
-                event_type = event["event"]
-                node_name = event.get("name", "")
+            # ── Skills comparison ────────────────────────────────
+            yield json.dumps({
+                "type": "step_start",
+                "node": "compare_skills",
+                "data": "Comparing Skills",
+            }) + "\n"
+            skills = await self.compare_skills(
+                analysis["jd_analysis"], analysis["cv_analysis"]
+            )
+            yield json.dumps({
+                "type": "step_end",
+                "node": "compare_skills",
+                "matched_skills": skills["matched_skills"],
+                "missing_skills": skills["missing_skills"],
+                "ats_score": skills["ats_score"],
+            }) + "\n"
 
-                # Only emit events from critical nodes
-                if event_type == "on_chain_start":
-                    if node_name == "compare_skills":
-                        logger.info("Node 'compare_skills' started.")
-                        yield json.dumps({
-                            "type": "step_start",
-                            "node": "compare_skills",
-                            "data": "Comparing Skills"
-                        }) + "\n"
-                    elif node_name == "polish_resume":
-                        logger.info("Node 'polish_resume' started.")
-                        yield json.dumps({
-                            "type": "step_start",
-                            "node": "polish_resume",
-                            "data": "Final Optimization"
-                        }) + "\n"
+            # ── Rewrite resume (streaming tokens) ────────────────
+            yield json.dumps({
+                "type": "step_start",
+                "node": "rewrite_resume",
+                "data": "Rewriting resume for ATS optimization",
+            }) + "\n"
 
-                elif event_type == "on_chain_end":
-                    if node_name == "compare_skills":
-                        logger.info("Node 'compare_skills' ended.")
-                        output = event["data"].get("output")
-                        if output and isinstance(output, dict):
-                            yield json.dumps({
-                                "type": "step_end",
-                                "node": "compare_skills",
-                                "matched_skills": output.get("matched_skills", []),
-                                "missing_skills": output.get("missing_skills", []),
-                                "ats_score": output.get("ats_score", 0)
-                            }) + "\n"
+            rewrite_prompt = REWRITE_RESUME_PROMPT.format(
+                resume_text=cv_text,
+                job_description=job_description,
+                analysis=skills["skills_comparison"],
+            )
+            tailored_chunks: list[str] = []
+            async for token_line in self._stream_llm_response(rewrite_prompt):
+                yield token_line
+                # Accumulate for the polish step
+                try:
+                    td = json.loads(token_line.strip())
+                    if td.get("type") == "token":
+                        tailored_chunks.append(td.get("content", ""))
+                except json.JSONDecodeError:
+                    pass
+            tailored_raw = "".join(tailored_chunks).removesuffix("</assistant>")
+            tailored = self._strip_analysis_leakage(tailored_raw)
 
-                    elif node_name == "polish_resume":
-                        logger.info("Node 'polish_resume' ended.")
-                        output = event["data"].get("output")
-                        if output and isinstance(output, dict) and "final_resume" in output:
-                            yield json.dumps({
-                                "type": "step_end",
-                                "node": "polish_resume",
-                                "final_result": output["final_resume"]
-                            }) + "\n"
+            # ── Polish resume (streaming tokens) ─────────────────
+            yield json.dumps({
+                "type": "step_start",
+                "node": "polish_resume",
+                "data": "Polishing final resume",
+            }) + "\n"
 
-                    elif node_name == "LangGraph":
-                        logger.info("Resume tailoring stream completed.")
-                        yield json.dumps({
-                            "type": "complete",
-                            "node": "LangGraph",
-                            "data": "Resume Tailoring Completed"
-                        }) + "\n"
+            polish_prompt = POLISH_RESUME_PROMPT.format(
+                tailored_resume=tailored,
+                job_description=job_description,
+            )
+            final_chunks: list[str] = []
+            async for token_line in self._stream_llm_response(polish_prompt):
+                yield token_line
+                try:
+                    td = json.loads(token_line.strip())
+                    if td.get("type") == "token":
+                        final_chunks.append(td.get("content", ""))
+                except json.JSONDecodeError:
+                    pass
+            final_raw = "".join(final_chunks).removesuffix("</assistant>")
+            final = self._strip_analysis_leakage(final_raw)
+
+            yield json.dumps({
+                "type": "step_end",
+                "node": "polish_resume",
+                "final_result": final,
+            }) + "\n"
+
+            yield json.dumps({
+                "type": "complete",
+                "data": "Resume tailoring completed",
+            }) + "\n"
 
         except asyncio.CancelledError:
-            logger.warning("Client disconnected during stream.")
+            logger.warning("Client disconnected during stream")
             raise
-
         except Exception as e:
             logger.exception("Streaming failed")
             yield json.dumps({
                 "type": "error",
-                "data": f"Streaming failed: {str(e)}"
+                "data": f"Streaming failed: {str(e)}",
             }) + "\n"

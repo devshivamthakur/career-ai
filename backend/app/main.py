@@ -11,10 +11,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from app.api.rate_limit import rate_limit_dependency
-from app.api.services import generate_request_id
 from app.core.config import settings
 from app.core.caching import initialize_semantic_cache
+from app.core.rate_limit import rate_limit_dependency
+from app.utils.helpers import generate_request_id
 
 # Initialize the semantic cache
 initialize_semantic_cache()
@@ -22,7 +22,6 @@ initialize_semantic_cache()
 
 def _get_request_id(request: Request) -> str:
     return getattr(request.state, "request_id", "unknown")
-
 
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
     request_id = _get_request_id(request)
@@ -32,7 +31,6 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
         content={"detail": exc.errors(), "request_id": request_id},
     )
 
-
 async def http_exception_handler(request: Request, exc: StarletteHTTPException):
     request_id = _get_request_id(request)
     logger.warning("Request %s: HTTP exception: %s", request_id, exc.detail)
@@ -41,7 +39,6 @@ async def http_exception_handler(request: Request, exc: StarletteHTTPException):
         return JSONResponse(status_code=exc.status_code, content=content, headers=exc.headers)
     return JSONResponse(status_code=exc.status_code, content=content)
 
-
 async def unexpected_exception_handler(request: Request, exc: Exception):
     request_id = _get_request_id(request)
     logger.exception("Request %s: unhandled exception: %s", request_id, exc)
@@ -49,7 +46,6 @@ async def unexpected_exception_handler(request: Request, exc: Exception):
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
         content={"detail": "Internal server error", "request_id": request_id},
     )
-
 
 def _parse_allowed_origins() -> list[str]:
     """Parse ALLOWED_ORIGINS from settings string"""
@@ -67,7 +63,6 @@ def _parse_allowed_origins() -> list[str]:
     
     logger.info("Configured CORS origins: %s", origins)
     return origins
-
 
 def _add_security_headers_middleware(app: FastAPI) -> None:
     """Add security headers to all responses"""
@@ -89,8 +84,19 @@ def _add_security_headers_middleware(app: FastAPI) -> None:
             if settings.ENVIRONMENT == "production":
                 response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
             
-            # Content Security Policy
-            response.headers["Content-Security-Policy"] = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'"
+            # Content Security Policy — relaxed in dev for Swagger UI, strict in prod
+            if settings.ENVIRONMENT == "production":
+                csp = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'"
+            else:
+                csp = (
+                    "default-src 'self'; "
+                    "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
+                    "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
+                    "img-src 'self' data: https://fastapi.tiangolo.com; "
+                    "font-src 'self' https://cdn.jsdelivr.net; "
+                    "connect-src 'self' http://localhost:* ws://localhost:*; "
+                )
+            response.headers["Content-Security-Policy"] = csp
             
             # Prevent information leakage
             response.headers["X-Powered-By"] = ""
@@ -99,21 +105,17 @@ def _add_security_headers_middleware(app: FastAPI) -> None:
         
         return response
 
-
 def get_application() -> FastAPI:
     """
     Initialize and configure the FastAPI application.
     Sets up CORS, security headers, routers, and basic app metadata.
     """
-    # Determine if docs should be visible
-    is_production = settings.ENVIRONMENT == "production"
-    show_docs = not (is_production and settings.HIDE_DOCS_IN_PRODUCTION)
+    show_docs = True
     
     app = FastAPI(
         title=settings.PROJECT_NAME,
         version=settings.VERSION,
         description="API for CareerAI - AI-Powered Job Application & Interview Prep Assistant",
-        # Hide OpenAPI docs in production for security
         docs_url="/docs" if show_docs else None,
         redoc_url="/redoc" if show_docs else None,
         openapi_url="/openapi.json" if show_docs else None,
@@ -150,13 +152,15 @@ def get_application() -> FastAPI:
     app.add_exception_handler(RequestValidationError, validation_exception_handler)
     app.add_exception_handler(Exception, unexpected_exception_handler)
 
-    # Include API routers here
+    # Include API routers
     from app.api.routes import api_router
-    from app.api.resume_routes import router as resume_router
+    from app.api.chat_routes import router as chat_router
     from app.api.assistant_routes import router as assistant_router
-    app.include_router(api_router, prefix="/api")
+    from app.api.resume_routes import router as resume_router
     app.include_router(resume_router, dependencies=[Depends(rate_limit_dependency)])
+    app.include_router(api_router, prefix="/api")
     app.include_router(assistant_router, dependencies=[Depends(rate_limit_dependency)])
+    app.include_router(chat_router, dependencies=[Depends(rate_limit_dependency)])
 
     return app
 

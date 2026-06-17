@@ -1,281 +1,151 @@
-# CareerAI — AI-Powered Job Helper
+# CareerAI — AI-Powered Job Application Assistant
 
-> An intelligent job application assistant that tailors resumes, generates cover letters, and prepares interview answers using AI.
+> An intelligent job application assistant powered by AI — tailors résumés, generates cover letters, prepares you for interviews, and answers career-related questions through a conversational chat agent.
 
-CareerAI is a full-stack application with a **FastAPI + LangGraph** backend and a **React + TypeScript + Vite** frontend. It uses large language models (OpenAI or AWS Bedrock) to help job seekers optimize their applications for specific roles.
-
----
-
-## Features
-
-### Resume Tailoring
-- **ATS‑optimized rewriting** — Upload a resume PDF + job description; get a tailored resume with matched/missing skills highlighted
-- **Real‑time streaming** — SSE‑based incremental output as the LangGraph workflow progresses
-- **Skill comparison** — See exactly which skills match and which are missing (ATS score 0–100)
-- **PDF export** — Download the tailored resume as a PDF
-
-### Cover Letter Generation
-- Generates a 3‑paragraph cover letter from your resume profile and the job posting
-
-### Interview Preparation
-- Generates likely interview questions with **STAR‑format** answers
-- Optionally personalized using projects from your uploaded resume
-
-### Production Infrastructure
-- **Semantic caching** (Redis + HuggingFace embeddings) — semantically similar requests reuse cached LLM responses
-- **Circuit breaker** — fails fast when error rate exceeds 10% in a 60‑second window
-- **Concurrency management** — max 10 concurrent requests, max 5 concurrent PDF parses
-- **Rate limiting** — 20 requests per client per 60 seconds (Redis‑backed)
-- **Security headers** — X‑Frame‑Options, CSP, HSTS, X‑Content‑Type‑Options, X‑XSS‑Protection
-- **Request ID tracking** — every request/response carries a unique ID
-- **Observability** — LangFuse tracing for LLM calls
+🔗 **Live Demo:** [career-ai-tan.vercel.app/chat](https://career-ai-tan.vercel.app/chat)
 
 ---
 
-## Tech Stack
+## ✨ Features
+
+| Feature | Description |
+|---|---|
+| 🤖 **AI Chat Agent** | Conversational career assistant with tool-calling, session memory, and real-time SSE streaming |
+| 📄 **Resume Tailoring** | Upload a PDF resume + paste a job description → get an ATS-optimized, tailored resume with matched/missing skills breakdown |
+| ✍️ **Cover Letter Generation** | Generate tailored, 3-paragraph cover letters based on your resume and job context |
+| 🎤 **Interview Preparation** | Generate role-specific questions with STAR-format answers, optionally personalized with your project experience |
+| 📊 **ATS Score** | Real-time compatibility scoring with visual ring indicator (0–100) |
+| 📎 **PDF Export** | Download your tailored resume as a polished PDF |
+
+## 🏗️ Architecture
+
+```
+ai-powered-job-helper/
+├── backend/          # FastAPI + Python backend
+│   ├── app/
+│   │   ├── agents/       # LangGraph workflows & LangChain agents
+│   │   ├── api/          # REST routes (resume, chat, career assistant)
+│   │   ├── core/         # Config, LLM builder, caching, rate limiting
+│   │   ├── db/           # SQLAlchemy models + Alembic migrations
+│   │   ├── schemas/      # Pydantic request/response models
+│   │   ├── services/     # Business logic (chat sessions, PDF, validation)
+│   │   └── prompts/      # LLM system prompts
+│   └── alembic/          # Database migration scripts
+├── frontend/         # React + TypeScript + Vite SPA
+│   └── src/
+│       ├── components/   # UI components (chat, resume, career, layout, shared)
+│       ├── pages/        # Route pages (/chat, /resume, /cover-letter, /interview)
+│       ├── stores/       # Zustand state management
+│       ├── hooks/        # Custom React hooks (SSE streaming, chat sessions, etc.)
+│       └── api/          # API client utilities
+└── README.md         # ← You are here
+```
+
+## 🧰 Tech Stack
 
 ### Backend
-
 | Technology | Purpose |
 |---|---|
-| **Python 3.14+, FastAPI** | Async web framework |
-| **LangGraph** | Resume tailoring workflow as a state graph |
-| **LangChain + LangChain‑OpenAI / AWS Bedrock** | LLM invocation |
-| **LangFuse** | LLM observability and tracing |
-| **Redis** | Rate limiting, semantic caching |
+| **Python 3.14+ / FastAPI** | Async web framework |
+| **LangGraph** | Resume tailoring workflow (4-node state machine) |
+| **LangChain (create_agent)** | Unified AI agent with middleware, tools & structured output |
+| **LangChain-OpenAI / AWS Bedrock** | Multi-provider LLM invocation |
+| **LangFuse** | LLM observability & tracing |
+| **Redis** | Rate limiting & semantic caching |
 | **PostgreSQL** | Primary database (SQLAlchemy + Alembic) |
-| **PDFplumber / ReportLab** | PDF text extraction & export generation |
+| **PDFplumber / ReportLab** | PDF extraction & generation |
+| **HuggingFace Embeddings** | Semantic cache similarity (`BAAI/bge-base-en-v1.5`) |
 
 ### Frontend
-
 | Technology | Purpose |
 |---|---|
-| **React 18, TypeScript** | UI framework |
-| **Vite 8** | Build tool and dev server |
-| **Tailwind CSS 4** | Utility‑first styling |
-| **`@microsoft/fetch-event-source`** | SSE streaming client |
-| **react‑markdown + remark‑gfm** | Rendering LLM markdown output |
+| **React 19** | UI framework |
+| **Vite 8** | Build tool & dev server |
+| **Tailwind CSS v4** | Utility-first styling |
+| **React Router v7** | Client-side routing |
+| **Zustand** | Lightweight state management |
+| **TanStack Query v5** | Server state & mutations |
+| **Lucide React** | Icon library |
+| **fetch-event-source** | SSE streaming client |
 
----
+## 🚀 Getting Started
 
-## Project Structure
+### Prerequisites
+- Python 3.14+
+- Node.js 22+
+- Redis (for caching & rate limiting)
+- PostgreSQL (optional, for persistence)
 
-```
-├── backend/                          # FastAPI Python backend
-│   ├── app/
-│   │   ├── agents/
-│   │   │   ├── resume_tailor.py      # LangGraph state machine (4 nodes)
-│   │   │   └── career_assistant.py   # Cover letter & interview prep agent
-│   │   ├── api/
-│   │   │   ├── resume_routes.py      # POST /api/resume/tailor/stream, /export-pdf
-│   │   │   ├── assistant_routes.py   # POST /api/career/cover-letter, /interview-prep
-│   │   │   ├── services.py           # Service layer: validation, PDF, streaming, orchestration
-│   │   │   ├── rate_limit.py         # Redis‑backed rate limiter
-│   │   │   ├── config.py             # Circuit breaker, concurrency manager, service config
-│   │   │   └── routes.py             # Shared API router
-│   │   ├── core/
-│   │   │   ├── config.py             # Pydantic settings (env vars)
-│   │   │   ├── llm.py                # Chat model builder (OpenAI or AWS Bedrock)
-│   │   │   └── caching.py            # Redis semantic cache with HuggingFace embeddings
-│   │   ├── db/
-│   │   │   ├── database.py           # SQLAlchemy engine + session
-│   │   │   └── models.py             # MasterResume, JobApplication, Generation
-│   │   ├── schemas/
-│   │   │   └── resume_schemas.py     # Pydantic models (JDValidation, SkillsComparison, state)
-│   │   ├── services/
-│   │   │   ├── pdf_service.py        # PDF text extraction
-│   │   │   ├── pdf_export.py         # Resume PDF generation
-│   │   │   └── career_assistant_service.py  # Career service orchestrator
-│   │   ├── prompts/
-│   │   │   └── resume_tailoring_prompts.py  # All LLM prompts
-│   │   └── utils.py                  # Constants (file size, JD length limits)
-│   ├── alembic/                      # Database migrations
-│   ├── .env.example                  # Environment variable template
-│   ├── pyproject.toml
-│   └── main.py                       # Dev server entry point
-│
-├── frontend/                         # React + TypeScript frontend
-│   ├── src/
-│   │   ├── api/
-│   │   │   └── client.ts             # Base API client (uses VITE_API_URL)
-│   │   ├── components/
-│   │   │   ├── ResumeUpload.tsx       # Resume PDF upload
-│   │   │   ├── JobDescriptionForm.tsx # Job description text input
-│   │   │   ├── StreamingOutput.tsx    # Streaming SSE output view
-│   │   │   └── TextOutput.tsx         # Copyable generated text display
-│   │   ├── hooks/
-│   │   │   ├── useResumeTailor.ts     # Resume tailoring API hook
-│   │   │   ├── useCoverLetter.ts      # Cover letter API hook
-│   │   │   └── useInterviewPrep.ts    # Interview prep API hook
-│   │   ├── pages/
-│   │   │   └── ResumeTailor.tsx       # Main tabbed UI
-│   │   ├── App.tsx
-│   │   ├── main.tsx
-│   │   └── index.css
-│   ├── public/
-│   ├── index.html
-│   ├── vite.config.ts
-│   ├── tailwind.config.js
-│   ├── tsconfig.json
-│   └── package.json
-│
-└── README.md                         # ← You are here
-```
-
----
-
-## Prerequisites
-
-- **Python 3.14+**
-- **Node.js 18+** and **npm** (or yarn / pnpm)
-- **Redis** instance (required for rate limiting + semantic cache)
-- **PostgreSQL** database
-- **LLM API key** — OpenAI‑compatible endpoint or AWS Bedrock access
-- **HuggingFace API token** (for semantic cache embeddings)
-
----
-
-## Setup
-
-### 1. Clone the repository
-
-```bash
-git clone <repo-url>
-cd ai-powered-job-helper
-```
-
-### 2. Backend
+### Backend Setup
 
 ```bash
 cd backend
-python -m venv .venv
-source .venv/bin/activate
-python -m pip install -e .
+python -m venv .venv && source .venv/bin/activate
+pip install -e ".[dev]"
 
 # Configure environment
-cp .env.example .env   # then edit .env with your credentials
+cp .env.example .env
+# Edit .env with your API keys (OpenAI / AWS Bedrock)
+
+# Run migrations
+alembic upgrade head
+
+# Start the server
+uvicorn app.main:app --reload --port 8000
 ```
 
-See [backend/.env.example](./backend/.env.example) for all available options.
-
-### 3. Frontend
+### Frontend Setup
 
 ```bash
 cd frontend
 npm install
-
-# Optional: override the backend URL
-echo "VITE_API_URL=http://localhost:8000/api" > .env
-```
-
-The frontend defaults to `http://localhost:8000/api` if `VITE_API_URL` is not set.
-
-### 4. Database migrations (if using PostgreSQL)
-
-```bash
-cd backend
-source .venv/bin/activate
-alembic upgrade head
-```
-
----
-
-## Running the App
-
-### Start the backend
-
-```bash
-cd backend
-source .venv/bin/activate
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
-```
-
-API docs are available at `http://localhost:8000/docs` (hidden in production when `HIDE_DOCS_IN_PRODUCTION=True`).
-
-### Start the frontend (in a separate terminal)
-
-```bash
-cd frontend
 npm run dev
 ```
 
-Open the URL shown in the terminal (typically `http://localhost:5173`).
+The frontend dev server runs on `http://localhost:5173` and proxies `/api` requests to the backend.
 
----
+### Environment Variables (Backend)
 
-## API Overview
+| Variable | Description |
+|---|---|
+| `OPENAI_API_KEY` | OpenAI API key |
+| `ANTHROPIC_API_KEY` | Anthropic API key |
+| `AWS_ACCESS_KEY_ID` | AWS credentials (Bedrock) |
+| `AWS_SECRET_ACCESS_KEY` | AWS credentials (Bedrock) |
+| `REDIS_URL` | Redis connection string |
+| `DATABASE_URL` | PostgreSQL connection string |
+| `LANGFUSE_PUBLIC_KEY` | LangFuse observability |
+| `LANGFUSE_SECRET_KEY` | LangFuse observability |
 
-All endpoints are prefixed with `/api`.
+## 🧪 API Endpoints
 
-| Endpoint | Method | Description |
+| Method | Path | Description |
 |---|---|---|
-| `/api/resume/tailor/stream` | `POST` | Upload resume PDF + job description → streaming tailored resume |
-| `/api/resume/export-pdf` | `POST` | Generate a PDF from tailored resume content |
-| `/api/career/cover-letter` | `POST` | Generate a cover letter from resume + job description |
-| `/api/career/interview-prep` | `POST` | Generate interview Q&A from job description (optional resume context) |
-| `/api/health` | `GET` | Health check |
+| `GET` | `/api/status` | Health check |
+| `POST` | `/api/chat/stream` | SSE streaming chat with AI agent |
+| `POST` | `/api/resume/tailor/stream` | Streaming resume tailoring (4 stages) |
+| `POST` | `/api/resume/export-pdf` | Download tailored resume as PDF |
+| `POST` | `/api/career/cover-letter` | Generate a cover letter |
+| `POST` | `/api/career/interview-prep` | Generate interview Q&A |
 
-All endpoints are documented interactively at `/docs` (Swagger UI) and `/redoc` (ReDoc) when running in development mode.
+## 📁 Frontend Pages
 
----
-
-## Environment Variables
-
-Key environment variables (see [backend/.env.example](./backend/.env.example) for the full list):
-
-| Variable | Required | Description |
+| Route | Page | Description |
 |---|---|---|
-| `ENVIRONMENT` | Yes | `development`, `staging`, or `production` |
-| `DATABASE_URL` | Yes | PostgreSQL connection string |
-| `REDIS_URL` | Yes | Redis connection string |
-| `OPENAI_API_KEY` | Conditional | OpenAI API key (when `LLM_PROVIDER=openai`) |
-| `LLM_PROVIDER` | Yes | `openai` or `aws` |
-| `AWS_REGION` / `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` | Conditional | AWS credentials (when `LLM_PROVIDER=aws`) |
-| `HUGGINGFACE_API_TOKEN` | Recommended | Token for semantic cache embeddings |
-| `LANGFUSE_PUBLIC_KEY` / `LANGFUSE_SECRET_KEY` | Optional | LangFuse observability |
-| `ALLOWED_ORIGINS` | Yes | Comma‑separated CORS origins |
-| `HIDE_DOCS_IN_PRODUCTION` | No | Set `True` to hide Swagger docs in production |
-| `ENABLE_SECURITY_HEADERS` | No | Set `True` to enable security response headers |
+| `/chat` | ChatPage | Conversational AI career assistant with tool-calling |
+| `/resume` | ResumePage | Upload resume + JD → tailored ATS-optimized resume |
+| `/cover-letter` | CoverLetterPage | Generate tailored cover letters |
+| `/interview` | InterviewPage | Generate interview questions with STAR answers |
+
+## 🛡️ Infrastructure
+
+- **Semantic Caching** — Redis + HuggingFace embeddings cache LLM responses for similar JDs
+- **Rate Limiting** — 20 requests/client/60s (Redis-backed Token Bucket)
+- **Circuit Breaker** — Opens when error rate exceeds 10% in a 60s window
+- **Concurrency Management** — asyncio semaphores (max 10 concurrent requests, max 5 concurrent PDF parses)
+- **Security Headers** — CSP, HSTS, X-Frame-Options, X-Content-Type-Options
+- **Request ID Tracking** — Every request gets a unique `X-Request-ID`
 
 ---
 
-## LangGraph Resume Tailoring Workflow
-
-The resume tailoring is powered by a **4‑node LangGraph state machine**:
-
-1. **`parallel_analyze`** — JD analysis and CV extraction run concurrently
-2. **`compare_skills`** — Compares extracted skills, produces matched/missing lists and an ATS score
-3. **`rewrite_resume`** — Rewrites the resume to emphasize matching skills
-4. **`polish_resume`** — Final polish pass for tone, grammar, and formatting
-
-Only critical nodes emit SSE events to the frontend, enabling **true token‑level streaming** via `astream_events()`.
-
----
-
-## Build & Deployment
-
-### Frontend production build
-
-```bash
-cd frontend
-npm run build
-npm run preview   # serve the built files locally
-```
-
-The production build is output to `frontend/dist/`.
-
-### Backend production considerations
-
-- Set `ENVIRONMENT=production` and `HIDE_DOCS_IN_PRODUCTION=True`
-- Configure `ALLOWED_ORIGINS` with your production frontend URL(s)
-- Ensure PostgreSQL and Redis are properly secured
-- Use a production ASGI server (e.g. `uvicorn` with Gunicorn, or `daphne`)
-
----
-
-## Notes
-
-- The frontend is optimized for **browser SSE streaming** — the resume is displayed incrementally as the LangGraph workflow progresses
-- Make sure the backend is healthy and reachable before using the UI
-- Semantic caching reduces LLM costs by reusing responses for semantically similar job descriptions
-- The circuit breaker prevents cascading failures when the LLM provider is degraded
+Built with ❤️ using FastAPI, LangChain, React, and Tailwind CSS.
