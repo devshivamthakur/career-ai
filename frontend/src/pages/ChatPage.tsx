@@ -7,7 +7,10 @@ import { ChatWindow } from '../components/chat/ChatWindow';
 import { InputBar } from '../components/chat/InputBar';
 
 
-const STREAM_URL = '/api/chat/stream';
+const API_ORIGIN = import.meta.env.VITE_API_URL ?? '';
+const STREAM_URL = API_ORIGIN
+  ? `${API_ORIGIN}/api/chat/stream`
+  : '/api/chat/stream';
 
 // ── Client-side resume extraction fallback ───────────────────
 // If the backend misses detecting resume markers, the frontend

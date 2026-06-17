@@ -6,8 +6,9 @@ import type {
   HealthResponse,
 } from '../types/api';
 
-const BASE_URL = '/api';
-const HEALTH_URL = '/health';
+const API_ORIGIN = import.meta.env.VITE_API_URL ?? '';
+const BASE_URL = API_ORIGIN ? `${API_ORIGIN}/api` : '/api';
+const HEALTH_URL = API_ORIGIN ? `${API_ORIGIN}/health` : '/health';
 
 async function fetchJson<T>(url: string, options?: RequestInit): Promise<T> {
   const response = await fetch(url, {

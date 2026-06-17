@@ -25,20 +25,12 @@ export function ChatWindow({ messages, isStreaming, onSuggestionClick }: ChatWin
 
   // Auto-scroll when new messages appear or during streaming
   useEffect(() => {
-    const container = containerRef.current;
-    if (!container) return;
-
-    // Use requestAnimationFrame so the DOM has painted new content first
-    const raf = requestAnimationFrame(() => {
-      // Scroll if user hasn't intentionally scrolled up
-      if (!userScrolledUpRef.current) {
-        bottomRef.current?.scrollIntoView({
-          behavior: isStreaming ? 'auto' : 'smooth',
-        });
-      }
-    });
-
-    return () => cancelAnimationFrame(raf);
+    // Scroll if user hasn't intentionally scrolled up
+    if (!userScrolledUpRef.current) {
+      bottomRef.current?.scrollIntoView({
+        behavior: isStreaming ? 'auto' : 'smooth',
+      });
+    }
   }, [messages, isStreaming]);
 
   if (messages.length === 0) {

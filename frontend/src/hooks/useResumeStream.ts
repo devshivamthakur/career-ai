@@ -3,7 +3,10 @@ import { useResumeStore } from '../stores/resumeStore';
 import { useToastStore } from '../stores/toastStore';
 import { useSseStream } from './useSseStream';
 
-const STREAM_URL = '/api/resume/tailor/stream';
+const API_ORIGIN = import.meta.env.VITE_API_URL ?? '';
+const STREAM_URL = API_ORIGIN
+  ? `${API_ORIGIN}/api/resume/tailor/stream`
+  : '/api/resume/tailor/stream';
 
 export function useResumeStream() {
   const { start, stop, isStreaming } = useSseStream();
