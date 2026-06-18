@@ -333,6 +333,16 @@ async def chat_stream(
             if temp_path and os.path.exists(temp_path):
                 os.unlink(temp_path)
             raise HTTPException(status_code=500, detail=f"File processing error: {e}")
+    else:
+        # No resume PDF uploaded — instruct the agent to avoid resume-dependent tools
+        final_message = (
+            f"[The user did NOT upload a resume PDF file. "
+            f"You have NO resume text available — do NOT call any tool that requires resume text "
+            f"(extract_resume_text, extract_resume_skills, extract_projects, compare_skills). "
+            f"Without a resume PDF, these tools cannot produce meaningful results. "
+            f"If the user asks for resume-related help, let them know they need to upload their resume PDF first.]\n\n"
+            f"User message: {message}"
+        )
 
     # Save user message to session
     save_message(session_id, "user", final_message)

@@ -40,7 +40,11 @@ class CompareSkillsInput(BaseModel):
 
 @tool("extract_resume_text", args_schema=ExtractResumeTextInput)
 def extract_resume_text(pdf_path: str) -> str:
-    """Extract raw text content from a PDF resume file."""
+    """Extract raw text content from a PDF resume file.
+    This is a critical tool that enables the agent to read user-uploaded resumes.
+    It uses a dedicated PDF parsing service that handles various resume formats and layouts.
+    The agent should only call this tool when the user has uploaded a PDF and referenced it in
+    """
     logger.info("📄 Extracting resume text from %s", pdf_path)
     try:
         text = PDFParsingService.extract_text_from_pdf(pdf_path)
@@ -54,7 +58,11 @@ def extract_resume_text(pdf_path: str) -> str:
 
 @tool("parse_job_description")
 def parse_job_description(job_description: str) -> str:
-    """Clean and normalise a raw job description into plain text (remove HTML, excess whitespace, etc.)."""
+    """Clean and normalise a raw job description into plain text (remove HTML, excess whitespace, etc.).
+    This helps ensure the agent gets a clear, concise job description to work with for skills comparison and tailoring.
+    The agent should call this tool whenever it receives a new job description input from the user, before any analysis or tailoring steps.
+
+    """
     logger.info("🔍 Cleaning job description…")
     # Basic cleaning — no LLM involved
     text = re.sub(r"<[^>]+>", " ", job_description)  # strip HTML
@@ -65,7 +73,10 @@ def parse_job_description(job_description: str) -> str:
 
 @tool("extract_resume_skills")
 def extract_resume_skills(resume_text: str) -> str:
-    """Extract skills, experience and project mentions from resume text using pattern matching (no LLM)."""
+    """Extract skills, experience and project mentions from resume text using pattern matching (no LLM).
+    This tool provides a quick way to pull out relevant information from the resume that can be used for skills comparison and tailoring.
+    The agent can call this tool after extracting the raw resume text, to get a distilled profile of the candidate's skills and experience.
+    """
     logger.info("📋 Extracting resume profile…")
     sections = re.split(r"\n(?=[A-Z][A-Za-z\s/]+:|\b(?:Education|Experience|Skills|Projects|Certifications)\b)", resume_text)
     # Return all non-empty sections for the model to process

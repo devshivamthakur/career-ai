@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { memo, useEffect, useRef, useState } from 'react';
 
 interface ATSScoreRingProps {
   score: number;
@@ -6,14 +6,16 @@ interface ATSScoreRingProps {
   animated?: boolean;
 }
 
+const CIRCUMFERENCE = 2 * Math.PI * 48; // r=48
+
 function getRingColor(score: number): string {
   if (score >= 75) return '#34D399';
   if (score >= 50) return '#FBBF24';
   return '#F87171';
 }
 
-export function ATSScoreRing({ score, size = 120, animated = true }: ATSScoreRingProps) {
-  const circumference = 2 * Math.PI * 48; // r=48
+export const ATSScoreRing = memo(function ATSScoreRing({ score, size = 120, animated = true }: ATSScoreRingProps) {
+  const circumference = CIRCUMFERENCE;
   const [offset, setOffset] = useState(animated ? circumference : circumference - (score / 100) * circumference);
   const [displayScore, setDisplayScore] = useState(animated ? 0 : score);
   const hasAnimated = useRef(false);
@@ -102,4 +104,4 @@ export function ATSScoreRing({ score, size = 120, animated = true }: ATSScoreRin
       <p className="text-xs text-text-secondary font-medium">ATS Compatibility Score</p>
     </div>
   );
-}
+});

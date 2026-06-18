@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import { X } from 'lucide-react';
 import { useToastStore } from '../../stores/toastStore';
 import type { ToastMessage } from '../../types/api';
@@ -16,7 +17,7 @@ const iconMap: Record<ToastMessage['type'], string> = {
   warning: '⚠',
 };
 
-function ToastItem({ toast }: { toast: ToastMessage }) {
+const ToastItem = memo(function ToastItem({ toast }: { toast: ToastMessage }) {
   const dismiss = useToastStore((s) => s.dismissToast);
 
   return (
@@ -41,9 +42,9 @@ function ToastItem({ toast }: { toast: ToastMessage }) {
       </button>
     </div>
   );
-}
+});
 
-export function ToastContainer() {
+export const ToastContainer = memo(function ToastContainer() {
   const toasts = useToastStore((s) => s.toasts);
 
   if (toasts.length === 0) return null;
@@ -57,4 +58,4 @@ export function ToastContainer() {
       ))}
     </div>
   );
-}
+});

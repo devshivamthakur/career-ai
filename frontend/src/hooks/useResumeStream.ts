@@ -26,11 +26,8 @@ export function useResumeStream() {
   const startStream = useCallback(() => {
     if (!file) return;
 
-    // Reset state
     useResumeStore.getState().reset();
-    useResumeStore.getState().setFile(file);
-    useResumeStore.getState().setJobDescription(jobDescription);
-    setStreaming(true);
+    useResumeStore.setState({ file, jobDescription, isStreaming: true });
 
     const formData = new FormData();
     formData.append('resume_pdf', file);

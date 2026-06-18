@@ -1,9 +1,11 @@
+import { memo } from 'react';
+
 interface SkillBadgesProps {
   skills: string[];
   type: 'matched' | 'missing';
 }
 
-export function SkillBadges({ skills, type }: SkillBadgesProps) {
+export const SkillBadges = memo(function SkillBadges({ skills, type }: SkillBadgesProps) {
   const isMatched = type === 'matched';
   const label = isMatched ? 'Matched Skills' : 'Missing Skills';
 
@@ -30,4 +32,4 @@ export function SkillBadges({ skills, type }: SkillBadgesProps) {
       </div>
     </div>
   );
-}
+});

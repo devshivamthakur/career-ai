@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import {
   MessageSquare,
@@ -21,7 +22,7 @@ interface SidebarProps {
   onNewChat?: () => void;
 }
 
-export function Sidebar({ onNewChat }: SidebarProps) {
+export const Sidebar = memo(function Sidebar({ onNewChat }: SidebarProps) {
   const { sidebarCollapsed, toggleSidebar, backendHealthy } = useUiStore();
   const navigate = useNavigate();
 
@@ -96,4 +97,4 @@ export function Sidebar({ onNewChat }: SidebarProps) {
       </div>
     </aside>
   );
-}
+});

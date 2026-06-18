@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import { useLocation } from 'react-router-dom';
 import { Trash2 } from 'lucide-react';
 import { ConfirmPopover } from '../shared/ConfirmPopover';
@@ -13,7 +14,7 @@ interface TopBarProps {
   onClearChat?: () => void;
 }
 
-export function TopBar({ onClearChat }: TopBarProps) {
+export const TopBar = memo(function TopBar({ onClearChat }: TopBarProps) {
   const location = useLocation();
   const pageName = pageNames[location.pathname] ?? 'CareerAI';
   const isChat = location.pathname === '/chat';
@@ -40,4 +41,4 @@ export function TopBar({ onClearChat }: TopBarProps) {
       </div>
     </header>
   );
-}
+});

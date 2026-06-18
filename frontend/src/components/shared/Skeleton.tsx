@@ -1,10 +1,12 @@
+import { memo } from 'react';
+
 interface SkeletonProps {
   className?: string;
   count?: number;
   height?: string;
 }
 
-export function Skeleton({ className = '', count = 1, height = '16px' }: SkeletonProps) {
+export const Skeleton = memo(function Skeleton({ className = '', count = 1, height = '16px' }: SkeletonProps) {
   return (
     <>
       {Array.from({ length: count }).map((_, i) => (
@@ -16,6 +18,6 @@ export function Skeleton({ className = '', count = 1, height = '16px' }: Skeleto
       ))}
     </>
   );
-}
+});
 
 

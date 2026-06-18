@@ -5,7 +5,6 @@ import tailwindcss from '@tailwindcss/vite'
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
   const proxyTarget = env.VITE_API_URL || 'http://localhost:8000';
-
   return {
     plugins: [react(), tailwindcss()],
     server: {
@@ -18,6 +17,21 @@ export default defineConfig(({ mode }) => {
         '/health': {
           target: proxyTarget,
           changeOrigin: true,
+        },
+      },
+    },
+    build: {
+      target: 'es2020',
+      cssMinify: true,
+      rollupOptions: {
+        output: {
+          manualChunks(id: string) {
+            if (id.includes('node_modules/react-dom') || id.includes('node_modules/react/') || id.includes('node_modules/react-router')) return 'vendor-react';
+            if (id.includes('node_modules/@tanstack/react-query')) return 'vendor-query';
+            if (id.includes('node_modules/react-markdown') || id.includes('node_modules/remark-gfm')) return 'vendor-md';
+            if (id.includes('node_modules/zustand')) return 'vendor-state';
+            if (id.includes('node_modules/lucide-react')) return 'vendor-icons';
+          },
         },
       },
     },

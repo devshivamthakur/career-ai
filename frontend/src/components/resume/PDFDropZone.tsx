@@ -1,4 +1,4 @@
-import { useState, useRef, type DragEvent, type ChangeEvent } from 'react';
+import { memo, useState, useRef, type DragEvent, type ChangeEvent } from 'react';
 import { Upload, FileText, CheckCircle2, X, AlertCircle } from 'lucide-react';
 
 interface PDFDropZoneProps {
@@ -8,7 +8,7 @@ interface PDFDropZoneProps {
   disabled?: boolean;
 }
 
-export function PDFDropZone({
+export const PDFDropZone = memo(function PDFDropZone({
   onFileSelect,
   currentFile,
   maxSizeMB = 10,
@@ -127,4 +127,4 @@ export function PDFDropZone({
       />
     </div>
   );
-}
+});

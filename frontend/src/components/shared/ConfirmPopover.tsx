@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { memo, useState, useRef, useEffect } from 'react';
 
 interface ConfirmPopoverProps {
   trigger: React.ReactNode;
@@ -10,7 +10,7 @@ interface ConfirmPopoverProps {
   variant?: 'danger' | 'default';
 }
 
-export function ConfirmPopover({
+export const ConfirmPopover = memo(function ConfirmPopover({
   trigger,
   title,
   message,
@@ -91,4 +91,4 @@ export function ConfirmPopover({
       )}
     </div>
   );
-}
+});
