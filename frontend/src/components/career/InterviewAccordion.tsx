@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { memo, useState } from 'react';
 import { ChevronDown, ChevronRight, Copy } from 'lucide-react';
 import type { InterviewQuestion } from '../../types/api';
 
@@ -91,7 +91,7 @@ function AccordionSkeleton() {
   );
 }
 
-export function InterviewAccordion({ questions, isLoading }: InterviewAccordionProps) {
+export const InterviewAccordion = memo(function InterviewAccordion({ questions, isLoading }: InterviewAccordionProps) {
   const handleCopyAll = () => {
     const text = questions
       .map(
@@ -134,4 +134,4 @@ export function InterviewAccordion({ questions, isLoading }: InterviewAccordionP
       </div>
     </div>
   );
-}
+});

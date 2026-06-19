@@ -6,7 +6,7 @@ import { InterviewAccordion } from '../components/career/InterviewAccordion';
 import { PDFDropZone } from '../components/resume/PDFDropZone';
 import type { InterviewQuestion } from '../types/api';
 
-export function InterviewPage() {
+export default function InterviewPage() {
   const [role, setRole] = useState('');
   const [company, setCompany] = useState('');
   const [jobDescription, setJobDescription] = useState('');

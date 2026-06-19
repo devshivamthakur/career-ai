@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import { Loader2, CheckCircle2 } from 'lucide-react';
 import type { ResumeStage } from '../../types/api';
 import { ATSScoreRing } from './ATSScoreRing';
@@ -40,7 +41,7 @@ interface ResumeStagesProps {
   onCopyResume: () => void;
 }
 
-export function ResumeStages({
+export const ResumeStages = memo(function ResumeStages({
   stage,
   atsScore,
   matchedSkills,
@@ -164,4 +165,4 @@ export function ResumeStages({
       </StageSection>
     </div>
   );
-}
+});

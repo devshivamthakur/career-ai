@@ -5,7 +5,7 @@ import { useToastStore } from '../stores/toastStore';
 import { CoverLetterResult } from '../components/career/CoverLetterResult';
 import { PDFDropZone } from '../components/resume/PDFDropZone';
 
-export function CoverLetterPage() {
+export default function CoverLetterPage() {
   const [company, setCompany] = useState('');
   const [role, setRole] = useState('');
   const [jobDescription, setJobDescription] = useState('');

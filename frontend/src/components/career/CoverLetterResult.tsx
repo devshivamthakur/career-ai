@@ -1,6 +1,8 @@
+import { memo } from 'react';
 import { Copy, RotateCcw, Download } from 'lucide-react';
 import { Skeleton } from '../shared/Skeleton';
 import { StreamingText } from '../shared/StreamingText';
+import { useToastStore } from '../../stores/toastStore';
 
 interface CoverLetterResultProps {
   coverLetter: string | null;
@@ -12,7 +14,7 @@ interface CoverLetterResultProps {
   onRegenerate: () => void;
 }
 
-export function CoverLetterResult({
+export const CoverLetterResult = memo(function CoverLetterResult({
   coverLetter,
   streamedText = '',
   isLoading,
@@ -27,7 +29,7 @@ export function CoverLetterResult({
     try {
       await navigator.clipboard.writeText(text);
     } catch {
-      // fallback
+      useToastStore.getState().showToast('Failed to copy to clipboard', 'error');
     }
   };
 
@@ -106,4 +108,4 @@ export function CoverLetterResult({
       </div>
     </div>
   );
-}
+});

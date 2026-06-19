@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { memo, useState } from 'react';
 import { Loader2, CheckCircle2, XCircle, ChevronDown, ChevronRight } from 'lucide-react';
 import type { ToolCallInfo } from '../../types/api';
 
@@ -6,7 +6,7 @@ interface ToolCallCardProps {
   toolCall: ToolCallInfo;
 }
 
-export function ToolCallCard({ toolCall }: ToolCallCardProps) {
+export const ToolCallCard = memo(function ToolCallCard({ toolCall }: ToolCallCardProps) {
   const [expanded, setExpanded] = useState(false);
 
   const statusIcon = () => {
@@ -62,4 +62,4 @@ export function ToolCallCard({ toolCall }: ToolCallCardProps) {
       )}
     </div>
   );
-}
+});

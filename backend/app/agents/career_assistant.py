@@ -209,7 +209,7 @@ class CareerAssistantAgent:
         # Use structured output to get typed InterviewQuestions
         try:
             structured_llm = self.interview_structured_llm.with_structured_output(InterviewQuestions)
-            print(f"Structured LLM prompt: {prompt}")  # Debugging line
+            logger.debug("Interview prep prompt (length=%d chars)", len(prompt))
             result: InterviewQuestions = await structured_llm.ainvoke(prompt)
             return result.questions
         except Exception as exc:

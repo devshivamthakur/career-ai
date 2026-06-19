@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import { Sparkles } from 'lucide-react';
 
 interface ChatEmptyStateProps {
@@ -10,7 +11,7 @@ const suggestions = [
   'Help me prepare for a system design interview',
 ];
 
-export function ChatEmptyState({ onSuggestionClick }: ChatEmptyStateProps) {
+export const ChatEmptyState = memo(function ChatEmptyState({ onSuggestionClick }: ChatEmptyStateProps) {
   return (
     <div className="flex-1 flex flex-col items-center justify-center px-6 py-12">
       <div className="flex items-center justify-center w-16 h-16 rounded-full bg-accent/10 mb-6">
@@ -35,4 +36,4 @@ export function ChatEmptyState({ onSuggestionClick }: ChatEmptyStateProps) {
       </div>
     </div>
   );
-}
+});

@@ -41,7 +41,7 @@ function generateId(): string {
   return `msg_${Date.now()}_${++messageCounter}`;
 }
 
-export function ChatPage() {
+export default function ChatPage() {
   const { sessionId, messages, isLoading } = useChatSession();
   const { start, stop, isStreaming } = useSseStream();
   const showToast = useToastStore((s) => s.showToast);

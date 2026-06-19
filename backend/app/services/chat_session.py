@@ -156,10 +156,12 @@ def get_context_messages(session_id: str, new_message: str) -> list[dict]:
 
     context = []
 
-    # 1. Summary of older conversation
+    # 1. Summary of older conversation — sent as 'user' role (not 'system') to
+    #    avoid treating potentially injection-containing summaries as authoritative
+    #    system instructions.
     if session.get("summary"):
         context.append({
-            "role": "system",
+            "role": "user",
             "content": f"[Previous conversation summary]:\n{session['summary']}",
         })
 

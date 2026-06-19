@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { memo, useState, useCallback } from 'react';
 import { Download, FileText, Check } from 'lucide-react';
 import type { ChatMessage } from '../../types/api';
 import { StreamingText } from '../shared/StreamingText';
@@ -24,7 +24,7 @@ function formatTime(timestamp: string): string {
   }
 }
 
-export function MessageBubble({ message, isStreaming }: MessageBubbleProps) {
+export const MessageBubble = memo(function MessageBubble({ message, isStreaming }: MessageBubbleProps) {
   const [showTime, setShowTime] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
   const showToast = useToastStore((s) => s.showToast);
@@ -125,4 +125,4 @@ export function MessageBubble({ message, isStreaming }: MessageBubbleProps) {
       </div>
     </div>
   );
-}
+});

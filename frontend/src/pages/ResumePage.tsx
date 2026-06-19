@@ -6,7 +6,7 @@ import { PDFDropZone } from '../components/resume/PDFDropZone';
 import { ResumeStages } from '../components/resume/ResumeStages';
 import { exportPdf } from '../api/client';
 
-export function ResumePage() {
+export default function ResumePage() {
   const {
     file,
     jobDescription,
