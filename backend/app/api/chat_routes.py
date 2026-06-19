@@ -28,6 +28,7 @@ from app.services.chat_session import (
     delete_session,
     ensure_session,
 )
+from app.utils.helpers import sanitise_user_input
 
 
 # ── Resume extraction helpers ────────────────────────────────────
@@ -303,6 +304,11 @@ async def chat_stream(
     # Ensure session exists (create if not)
     ensure_session(session_id)
 
+    # ── Input sanitisation ────────────────────────────────────
+    # Strip known prompt injection / jailbreak patterns from user input
+    # BEFORE it enters any prompt template or session storage.
+    message = sanitise_user_input(message)
+
     # If a file was uploaded, prepend context to the message
     final_message = message
     temp_path = None
@@ -324,7 +330,9 @@ async def chat_stream(
                 f"[The user uploaded a resume file: {file.filename}]\n"
                 f"[File saved to: {temp_path}]\n"
                 f"Use the `extract_resume_text` tool with pdf_path=\"{temp_path}\" to read it.\n\n"
-                f"User message: {message}"
+                f"═══════════════ USER MESSAGE ═══════════════\n"
+                f"{message}\n"
+                f"═════════════ END USER MESSAGE ═════════════"
             )
         except HTTPException:
             raise
@@ -341,13 +349,17 @@ async def chat_stream(
             f"(extract_resume_text, extract_resume_skills, extract_projects, compare_skills). "
             f"Without a resume PDF, these tools cannot produce meaningful results. "
             f"If the user asks for resume-related help, let them know they need to upload their resume PDF first.]\n\n"
-            f"User message: {message}"
+            f"═══════════════ USER MESSAGE ═══════════════\n"
+            f"{message}\n"
+            f"═════════════ END USER MESSAGE ═════════════"
         )
 
-    # Save user message to session
-    save_message(session_id, "user", final_message)
+    # Save the original user message (without system instruction prefix) to session
+    # so chat history stays clean when reloaded on page refresh.
+    save_message(session_id, "user", message)
 
     # Build context messages for the LLM (summary + last N + new message)
+    # Use final_message here so the LLM receives the system instructions.
     context_messages = get_context_messages(session_id, final_message)
 
     async def event_stream():
