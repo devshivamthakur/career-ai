@@ -114,21 +114,22 @@ class CareerAgent:
 
                 # ── Tool start (skip compare_skills — internal detail) ──
                 if kind == "on_tool_start":
-                    if name == "compare_skills":
-                        continue
-                    yield (
-                        "event: tool_start\n"
-                        f"data: {json.dumps({'tool': name, 'input': str(evt['data'].get('input', ''))[:500]})}\n\n"
-                    )
+                    continue
+                    # if name == "compare_skills":
+                    #     continue
+                    # yield (
+                    #     "event: tool_start\n"
+                    #     f"data: {json.dumps({'tool': name, 'input': str(evt['data'].get('input', ''))[:500]})}\n\n"
+                    # )
 
                 # ── Tool end (skip compare_skills) ──
                 elif kind == "on_tool_end":
-                    if name == "compare_skills":
-                        continue
-                    yield (
-                        "event: tool_end\n"
-                        f"data: {json.dumps({'tool': name})}\n\n"
-                    )
+                    continue
+                    # if name == "compare_skills":
+                    # yield (
+                    #     "event: tool_end\n"
+                    #     f"data: {json.dumps({'tool': name})}\n\n"
+                    # )
 
                 # ── Token streaming ──
                 elif kind == "on_chat_model_stream":
