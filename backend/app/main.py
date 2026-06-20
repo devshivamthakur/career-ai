@@ -110,7 +110,7 @@ def get_application() -> FastAPI:
     Initialize and configure the FastAPI application.
     Sets up CORS, security headers, routers, and basic app metadata.
     """
-    show_docs = True
+    show_docs = not settings.HIDE_DOCS_IN_PRODUCTION
     
     app = FastAPI(
         title=settings.PROJECT_NAME,

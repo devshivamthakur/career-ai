@@ -70,6 +70,9 @@ class Settings(BaseSettings):
     # Example: "https://example.com" or comma-separated list
     ALLOWED_ORIGINS: str = "http://localhost:5173,http://localhost:3000"
     
+    # Security - Hide OpenAPI/Swagger docs in production
+    HIDE_DOCS_IN_PRODUCTION: bool = False
+    
     # Security - Enable/disable various security headers
     ENABLE_SECURITY_HEADERS: bool = True
     
