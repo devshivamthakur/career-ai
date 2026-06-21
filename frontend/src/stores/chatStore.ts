@@ -6,6 +6,7 @@ interface ChatState {
   messages: ChatMessage[];
   isStreaming: boolean;
   attachedFile: File | null;
+  resumeUploaded: boolean; // true once a resume PDF has been uploaded successfully
 
   // Actions
   setSessionId: (id: string) => void;
@@ -17,6 +18,7 @@ interface ChatState {
   setResumeContent: (content: string) => void;
   setStreaming: (streaming: boolean) => void;
   setAttachedFile: (file: File | null) => void;
+  setResumeUploaded: (uploaded: boolean) => void;
   clearMessages: () => void;
   reset: () => void;
 }
@@ -26,6 +28,7 @@ export const useChatStore = create<ChatState>((set) => ({
   messages: [],
   isStreaming: false,
   attachedFile: null,
+  resumeUploaded: false,
 
   setSessionId: (id) => set({ sessionId: id }),
 
@@ -82,7 +85,9 @@ export const useChatStore = create<ChatState>((set) => ({
 
   setAttachedFile: (file) => set({ attachedFile: file }),
 
-  clearMessages: () => set({ messages: [] }),
+  setResumeUploaded: (uploaded) => set({ resumeUploaded: uploaded }),
+
+  clearMessages: () => set({ messages: [], resumeUploaded: false }),
 
   reset: () =>
     set({
@@ -90,5 +95,6 @@ export const useChatStore = create<ChatState>((set) => ({
       messages: [],
       isStreaming: false,
       attachedFile: null,
+      resumeUploaded: false,
     }),
 }));

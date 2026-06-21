@@ -12,7 +12,6 @@ import json
 import logging
 import os
 import re
-import tempfile
 from typing import Optional
 
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException, status, Request
@@ -27,6 +26,9 @@ from app.services.chat_session import (
     get_context_messages,
     delete_session,
     ensure_session,
+    has_resume_file,
+    save_resume_file,
+    get_resume_context,
 )
 from app.utils.helpers import sanitise_user_input
 
@@ -309,27 +311,60 @@ async def chat_stream(
     # BEFORE it enters any prompt template or session storage.
     message = sanitise_user_input(message)
 
-    # If a file was uploaded, prepend context to the message
-    final_message = message
+    # ── File upload handling (one per session) ───────────────
+    # If a file is uploaded, extract text immediately and store in session.
+    # This eliminates redundant tool calls and avoids middleware-limit errors.
     temp_path = None
     if file and file.filename:
+        # Reject if a file was already uploaded in this session
+        if has_resume_file(session_id):
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "You already uploaded a resume file in this chat. "
+                    "If you need to use a different resume, please start a new chat session."
+                ),
+            )
+
         if file.content_type != "application/pdf":
             raise HTTPException(status_code=400, detail="Only PDF files are accepted")
 
         try:
-            content = await file.read()
-            if len(content) > 10 * 1024 * 1024:
+            pdf_bytes = await file.read()
+            if len(pdf_bytes) > 10 * 1024 * 1024:
                 raise HTTPException(status_code=413, detail="File exceeds 10 MB limit")
 
-            suffix = ".pdf"
-            with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
-                tmp.write(content)
-                temp_path = tmp.name
+            # Extract text immediately so the agent never needs to call extract_resume_text
+            from app.services.pdf_service import PDFParsingService
+            resume_text = PDFParsingService.extract_text_from_pdf_bytes(pdf_bytes)
+
+            if not resume_text or len(resume_text.strip()) < 50:
+                raise HTTPException(
+                    status_code=422,
+                    detail=(
+                        "We couldn't extract enough text from your PDF. "
+                        "The file may be scanned/image-based (not selectable text). "
+                        "Please try a PDF with selectable text, or copy-paste your "
+                        "resume content directly into the chat."
+                    ),
+                )
+
+            # Save to session — this marks the session as having a resume
+            save_resume_file(session_id, file.filename, resume_text)
+
+            # Warm the in-memory tool cache so even if the agent calls the tool,
+            # it returns instantly without hitting middleware limits.
+            from app.agents.tools import _warm_tool_cache
+            _warm_tool_cache("extract_resume_text", resume_text)
 
             final_message = (
-                f"[The user uploaded a resume file: {file.filename}]\n"
-                f"[File saved to: {temp_path}]\n"
-                f"Use the `extract_resume_text` tool with pdf_path=\"{temp_path}\" to read it.\n\n"
+                f"[Resume file uploaded: {file.filename}]\n"
+                f"[Resume text extracted successfully ({len(resume_text)} chars). "
+                f"The text is already provided in the context below — "
+                f"you do NOT need to call extract_resume_text.]\n\n"
+                f"═══════════════ RESUME TEXT ════════════════\n"
+                f"{resume_text}\n"
+                f"═════════════ END RESUME TEXT ══════════════\n\n"
                 f"═══════════════ USER MESSAGE ═══════════════\n"
                 f"{message}\n"
                 f"═════════════ END USER MESSAGE ═════════════"
@@ -337,22 +372,32 @@ async def chat_stream(
         except HTTPException:
             raise
         except Exception as e:
-            logger.exception("File upload error")
-            if temp_path and os.path.exists(temp_path):
-                os.unlink(temp_path)
-            raise HTTPException(status_code=500, detail=f"File processing error: {e}")
+            logger.exception("File upload / extraction error")
+            raise HTTPException(
+                status_code=500,
+                detail=f"Failed to process resume PDF: {str(e)[:200]}",
+            )
     else:
-        # No resume PDF uploaded — instruct the agent to avoid resume-dependent tools
-        final_message = (
-            f"[The user did NOT upload a resume PDF file. "
-            f"You have NO resume text available — do NOT call any tool that requires resume text "
-            f"(extract_resume_text, extract_resume_skills, extract_projects, compare_skills). "
-            f"Without a resume PDF, these tools cannot produce meaningful results. "
-            f"If the user asks for resume-related help, let them know they need to upload their resume PDF first.]\n\n"
-            f"═══════════════ USER MESSAGE ═══════════════\n"
-            f"{message}\n"
-            f"═════════════ END USER MESSAGE ═════════════"
-        )
+        # No file uploaded — check if we already have resume text in the session
+        resume_ctx = get_resume_context(session_id)
+        if resume_ctx:
+            final_message = (
+                f"{resume_ctx}\n\n"
+                f"═══════════════ USER MESSAGE ═══════════════\n"
+                f"{message}\n"
+                f"═════════════ END USER MESSAGE ═════════════"
+            )
+        else:
+            final_message = (
+                f"[The user did NOT upload a resume PDF file. "
+                f"You have NO resume text available — do NOT call any tool that requires resume text "
+                f"(extract_resume_text, extract_resume_skills, extract_projects, compare_skills). "
+                f"Without a resume PDF, these tools cannot produce meaningful results. "
+                f"If the user asks for resume-related help, let them know they need to upload their resume PDF first.]\n\n"
+                f"═══════════════ USER MESSAGE ═══════════════\n"
+                f"{message}\n"
+                f"═════════════ END USER MESSAGE ═════════════"
+            )
 
     # Save the original user message (without system instruction prefix) to session
     # so chat history stays clean when reloaded on page refresh.

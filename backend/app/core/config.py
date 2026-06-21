@@ -51,6 +51,7 @@ class Settings(BaseSettings):
     FAST_MODEL_MAX_TOKENS: int = 4096
     QUALITY_MODEL_MAX_TOKENS: int = 8192
     AGENT_MAX_TOKENS: int = 4096       # Max tokens for agent-style responses
+    AGENT_RECURSION_LIMIT: int = 100   # Max LangGraph recursion steps (tool calls + LLM rounds)
     COVER_LETTER_MAX_TOKENS: int = 2048
     INTERVIEW_PREP_MAX_TOKENS: int = 4096
 

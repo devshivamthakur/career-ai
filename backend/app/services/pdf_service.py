@@ -221,6 +221,96 @@ class PDFParsingService:
     # ------------------------------------------------------------------
 
     @staticmethod
+    def extract_text_from_pdf_bytes(
+        pdf_bytes: bytes,
+        max_pages: int = DEFAULT_MAX_PAGES,
+        min_text_length: int = DEFAULT_MIN_TEXT_LENGTH,
+    ) -> str:
+        """
+        Extract all text from PDF bytes (e.g. from an uploaded file).
+
+        This is identical to ``extract_text_from_pdf`` but accepts raw bytes
+        instead of a file path, avoiding a round-trip through the filesystem.
+
+        Args:
+            pdf_bytes: Raw PDF file content.
+            max_pages: Maximum number of pages to process (default 50).
+            min_text_length: Minimum expected text length (default 50).
+
+        Returns:
+            Extracted and normalized text content.
+
+        Raises:
+            PDFEncryptedError, PDFCorruptedError, PDFEmptyError,
+            PDFPageLimitExceeded — see :meth:`extract_text_from_pdf`.
+        """
+        start = time.perf_counter()
+        import io
+        stream = io.BytesIO(pdf_bytes)
+
+        # ── Open & validate ────────────────────────────────────────
+        try:
+            pdf = pdfplumber.open(stream)
+        except Exception as exc:
+            raise PDFCorruptedError(
+                f"Failed to open PDF from bytes: {exc}"
+            ) from exc
+
+        if getattr(pdf, "encrypted", False):
+            pdf.close()
+            raise PDFEncryptedError("PDF is encrypted/password-protected")
+
+        page_count = len(pdf.pages)
+        file_size = len(pdf_bytes)
+
+        logger.info(
+            "PDF opened from bytes: pages=%d, size=%.1fMB",
+            page_count,
+            file_size / (1024 * 1024),
+        )
+
+        if page_count == 0:
+            pdf.close()
+            raise PDFEmptyError("PDF has no pages")
+
+        if page_count > max_pages:
+            pdf.close()
+            raise PDFPageLimitExceeded(
+                f"PDF has {page_count} pages (max allowed: {max_pages})"
+            )
+
+        # ── Extract text page by page ──────────────────────────────
+        pages_text: list[str] = []
+        for i, page in enumerate(pdf.pages, start=1):
+            try:
+                page_text = page.extract_text() or ""
+            except Exception:
+                logger.warning("Page %d extraction failed, skipping", i)
+                page_text = ""
+            pages_text.append(page_text)
+
+        pdf.close()
+
+        combined = "\n".join(pages_text).strip()
+        combined = PDFParsingService._normalize_text(combined)
+
+        elapsed_ms = (time.perf_counter() - start) * 1000
+
+        if len(combined) < min_text_length:
+            raise PDFEmptyError(
+                f"Only {len(combined)} characters extracted from {page_count} "
+                f"page(s) (minimum required: {min_text_length})"
+            )
+
+        logger.info(
+            "PDF extracted from bytes: chars=%d, pages=%d, time=%.0fms",
+            len(combined),
+            page_count,
+            elapsed_ms,
+        )
+        return combined
+
+    @staticmethod
     def validate_pdf_file(file_path: str) -> bool:
         """
         Quick validation that the file is a readable, non-empty PDF.

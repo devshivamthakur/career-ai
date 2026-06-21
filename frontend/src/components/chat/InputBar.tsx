@@ -7,6 +7,7 @@ interface InputBarProps {
   onAttachFile: (file: File | null) => void;
   isStreaming: boolean;
   attachedFile: File | null;
+  resumeUploaded: boolean;
   disabled?: boolean;
 }
 
@@ -16,6 +17,7 @@ export function InputBar({
   onAttachFile,
   isStreaming,
   attachedFile,
+  resumeUploaded,
   disabled,
 }: InputBarProps) {
   const [input, setInput] = useState('');
@@ -83,13 +85,13 @@ export function InputBar({
       )}
 
       <div className="flex items-stretch gap-2">
-        {/* Attach file button */}
+        {/* Attach file button — disabled once a resume is uploaded */}
         <div className="flex items-center">
           <button
             onClick={() => fileInputRef.current?.click()}
-            disabled={isStreaming}
+            disabled={isStreaming || resumeUploaded}
             className="p-2 rounded-lg text-text-secondary hover:text-text-primary hover:bg-bg-elevated transition-colors disabled:opacity-40"
-            title="Attach resume for context"
+            title={resumeUploaded ? 'Resume already uploaded (one per chat)' : 'Attach resume PDF'}
           >
             <Paperclip size={18} />
           </button>

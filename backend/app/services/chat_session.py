@@ -10,11 +10,22 @@ Structures:
       "messages": [
         {"role": "user"|"assistant", "content": "...", "timestamp": "ISO"}
       ],
-      "summary": "AI-generated summary of older messages (for context window)"
+      "summary": "AI-generated summary of older messages (for context window)",
+      "resume": {                                    <-- optional, set once per session
+        "filename": "resume.pdf",
+        "content": "extracted text...",
+        "uploaded_at": "ISO timestamp"
+      }
     }
 
 When a session has more than 7 messages, the oldest messages get rolled up
 into a summary and only the last 7 messages + summary are sent to the LLM.
+
+Resume file tracking:
+  - Only ONE file upload is allowed per session.
+  - Once uploaded, the extracted text is stored in the `resume` field and
+    re-injected into context on every subsequent turn.
+  - This eliminates redundant tool calls and confusing middleware-limit errors.
 """
 
 import json
@@ -183,3 +194,54 @@ def delete_session(session_id: str) -> bool:
         logger.info("Deleted session %s", session_id)
         return True
     return False
+
+
+# ── Resume file tracking (one per session) ────────────────
+
+
+def has_resume_file(session_id: str) -> bool:
+    """Check if a resume file has already been uploaded in this session."""
+    session = get_session(session_id)
+    return session is not None and "resume" in session
+
+
+def save_resume_file(session_id: str, filename: str, content: str) -> None:
+    """Store resume file metadata and extracted text in the session.
+    
+    This is a one-time operation per session — subsequent uploads should
+    be rejected at the API level.
+    """
+    session = get_session(session_id)
+    if session is None:
+        logger.warning("Session %s not found, cannot save resume", session_id)
+        return
+
+    session["resume"] = {
+        "filename": filename,
+        "content": content,
+        "uploaded_at": datetime.now(timezone.utc).isoformat(),
+    }
+    session["updated_at"] = datetime.now(timezone.utc).isoformat()
+    _persist(session)
+    logger.info(
+        "Saved resume file '%s' to session %s (%d chars)",
+        filename, session_id, len(content),
+    )
+
+
+def get_resume_context(session_id: str) -> Optional[str]:
+    """Return a context block for the LLM containing the previously uploaded resume.
+    
+    Returns None if no resume has been uploaded yet.
+    """
+    session = get_session(session_id)
+    if session is None:
+        return None
+    resume = session.get("resume")
+    if resume is None:
+        return None
+    return (
+        f"[Resume text from previously uploaded file: {resume['filename']}]\n"
+        f"{resume['content']}\n"
+        f"[End of resume text. You already have this data — do NOT call extract_resume_text again.]"
+    )

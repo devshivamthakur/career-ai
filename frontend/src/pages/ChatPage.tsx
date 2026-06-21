@@ -53,8 +53,10 @@ export default function ChatPage() {
     updateToolCall,
     setResumeContent,
     setStreaming,
+    setResumeUploaded,
     attachedFile,
     setAttachedFile,
+    resumeUploaded,
   } = useChatStore();
 
   // Track tool call IDs for the current stream
@@ -97,6 +99,9 @@ export default function ChatPage() {
       if (attachedFile) {
         formData.append('file', attachedFile);
         setAttachedFile(null);
+        // Optimistically mark as uploaded; backend will reject duplicates
+        // with a clear error if this somehow isn't the first upload.
+        setResumeUploaded(true);
       }
 
       start({
@@ -157,6 +162,7 @@ export default function ChatPage() {
               const resumeData = d as { content?: string };
               if (resumeData.content) {
                 setResumeContent(resumeData.content);
+                setResumeUploaded(true);
               }
               break;
             }
@@ -176,17 +182,25 @@ export default function ChatPage() {
         onComplete: () => {
           // Client-side fallback: check if the last message has resume markers
           // (in case the backend `resume_ready` event wasn't emitted)
-          const { messages: currentMsgs } = useChatStore.getState();
+          const { messages: currentMsgs, resumeUploaded: alreadyUploaded } = useChatStore.getState();
           const lastMsg = currentMsgs[currentMsgs.length - 1];
           if (lastMsg && lastMsg.role === 'assistant' && !lastMsg.resumeContent) {
             const extracted = extractResumeFromText(lastMsg.content);
             if (extracted) {
               setResumeContent(extracted);
+              if (!alreadyUploaded) {
+                setResumeUploaded(true);
+              }
             }
           }
           setStreaming(false);
         },
         onError: (error) => {
+          // If the error is about duplicate file upload, ensure flag is set
+          // (the backend rejected it because a resume was already uploaded).
+          if (error.toLowerCase().includes('already uploaded')) {
+            setResumeUploaded(true);
+          }
           showToast(error, 'error');
           setStreaming(false);
         },
@@ -243,6 +257,7 @@ export default function ChatPage() {
         onAttachFile={setAttachedFile}
         isStreaming={isStreaming}
         attachedFile={attachedFile}
+        resumeUploaded={resumeUploaded}
       />
     </div>
   );

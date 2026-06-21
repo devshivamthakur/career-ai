@@ -20,6 +20,22 @@ from app.schemas.resume_schemas import SkillsComparisonResult
 
 logger = logging.getLogger(__name__)
 
+# ── In-memory cache for tool results ──────────────────────────
+# Prevents redundant calls (PDF parsing is expensive, tool limits are tight).
+_tool_cache: dict[str, str] = {}
+
+
+def _warm_tool_cache(tool_name: str, result: str) -> None:
+    """Pre-populate the in-memory tool cache with a known result.
+    
+    Used by the route handler after extracting resume text at upload time,
+    so the agent's tool call returns instantly without hitting middleware limits.
+    Creates a sentinel key so any invocation of the tool (regardless of pdf_path)
+    returns the cached result directly.
+    """
+    _tool_cache[f"prewarm:{tool_name}"] = result
+    logger.info("🔥 Pre-warmed %s cache (%d chars)", tool_name, len(result))
+
 
 # ── Pydantic schemas for structured tool args ──────────────────
 
@@ -40,16 +56,25 @@ class CompareSkillsInput(BaseModel):
 
 @tool("extract_resume_text", args_schema=ExtractResumeTextInput)
 def extract_resume_text(pdf_path: str) -> str:
-    """Extract raw text content from a PDF resume file.
-    This is a critical tool that enables the agent to read user-uploaded resumes.
-    It uses a dedicated PDF parsing service that handles various resume formats and layouts.
-    The agent should only call this tool when the user has uploaded a PDF and referenced it in
-    """
-    logger.info("📄 Extracting resume text from %s", pdf_path)
+    """Extract raw text content from a PDF resume file. CRITICAL: Only call this tool when you can see a `[File saved to: ...]` or `[Resume file uploaded: ...]` marker in the conversation. If there is no such marker, do NOT call this tool — ask the user to upload their resume PDF first. If you already have the resume text in context (from a previous turn or the current message), you do NOT need to call this tool."""
+    # 1. Check pre-warmed cache (set by route handler at upload time)
+    prewarm_key = "prewarm:extract_resume_text"
+    if prewarm_key in _tool_cache:
+        logger.info("📄 Returning pre-warmed resume text from route handler")
+        return _tool_cache[prewarm_key]
+
+    # 2. Check pdf_path-based cache (set by a prior invocation)
+    cache_key = f"extract_resume_text:{pdf_path}"
+    if cache_key in _tool_cache:
+        logger.info("📄 Returning cached resume text for %s", pdf_path)
+        return _tool_cache[cache_key]
+
+    logger.info("📄 Extracting resume text from %s (cache miss)", pdf_path)
     try:
         text = PDFParsingService.extract_text_from_pdf(pdf_path)
         if not text or len(text.strip()) < 50:
             return "Error: Could not extract sufficient text from PDF."
+        _tool_cache[cache_key] = text
         return text
     except Exception as e:
         logger.exception("PDF extraction failed")
@@ -58,11 +83,7 @@ def extract_resume_text(pdf_path: str) -> str:
 
 @tool("parse_job_description")
 def parse_job_description(job_description: str) -> str:
-    """Clean and normalise a raw job description into plain text (remove HTML, excess whitespace, etc.).
-    This helps ensure the agent gets a clear, concise job description to work with for skills comparison and tailoring.
-    The agent should call this tool whenever it receives a new job description input from the user, before any analysis or tailoring steps.
-
-    """
+    """Clean and normalise a raw job description into plain text (remove HTML, excess whitespace, etc.). Call this tool AT MOST ONCE per job description — if you already have a parsed/cleaned version from a previous call, do NOT call it again. Do NOT call this tool if the job description is already clean plain text."""
     logger.info("🔍 Cleaning job description…")
     # Basic cleaning — no LLM involved
     text = re.sub(r"<[^>]+>", " ", job_description)  # strip HTML
@@ -73,10 +94,7 @@ def parse_job_description(job_description: str) -> str:
 
 @tool("extract_resume_skills")
 def extract_resume_skills(resume_text: str) -> str:
-    """Extract skills, experience and project mentions from resume text using pattern matching (no LLM).
-    This tool provides a quick way to pull out relevant information from the resume that can be used for skills comparison and tailoring.
-    The agent can call this tool after extracting the raw resume text, to get a distilled profile of the candidate's skills and experience.
-    """
+    """Extract skills, experience and project mentions from resume text using pattern matching (no LLM). Call this tool AT MOST ONCE per resume — if you have already called it and have the extracted profile, do NOT call it again. This tool is OPTIONAL — only use it if you need a distilled skill profile for analysis."""
     logger.info("📋 Extracting resume profile…")
     sections = re.split(r"\n(?=[A-Z][A-Za-z\s/]+:|\b(?:Education|Experience|Skills|Projects|Certifications)\b)", resume_text)
     # Return all non-empty sections for the model to process
@@ -90,7 +108,7 @@ def extract_resume_skills(resume_text: str) -> str:
 
 @tool("extract_projects")
 def extract_projects(resume_text: str) -> str:
-    """Extract project-related sections from resume text using simple heuristics (no LLM)."""
+    """Extract project-related sections from resume text using simple heuristics (no LLM). Call this tool AT MOST ONCE per resume. Only use if you need specific project details for interview prep or cover letters. Skip this tool for simple resume rewrites."""
     logger.info("📁 Extracting projects from resume…")
     # Simple heuristic: look for lines containing "project" or common project indicators
     lines = resume_text.split("\n")
@@ -113,7 +131,7 @@ def extract_projects(resume_text: str) -> str:
 
 @tool("compare_skills", args_schema=CompareSkillsInput)
 def compare_skills(job_requirements: str, user_profile: str) -> str:
-    """Use an LLM to deeply compare a candidate profile against a job description. Returns structured ATS analysis including matched/missing skills, score, and tailored recommendations."""
+    """Use an LLM to deeply compare a candidate profile against a job description. Returns structured ATS analysis including matched/missing skills, score, and tailored recommendations. CRITICAL: Call this tool AT MOST ONCE per comparison. Only call it when you have BOTH an extracted/parsed job description AND a resume profile. NEVER call this tool multiple times with the same inputs."""
     logger.info("⚖️  Comparing skills via LLM…")
     try:
         from app.core.config import settings as app_settings
