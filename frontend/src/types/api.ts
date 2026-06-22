@@ -7,6 +7,8 @@ export interface ChatMessage {
   timestamp: string;
   toolCalls?: ToolCallInfo[];
   resumeContent?: string;
+  /** Path to an uploaded file (e.g. "storage/resume_xxx.pdf") stored on the backend */
+  file?: string;
 }
 
 export interface ToolCallInfo {

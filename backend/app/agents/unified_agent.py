@@ -182,6 +182,7 @@ class CareerAgent:
             streaming=True,
             callbacks=callbacks,
             max_tokens=self.config.max_tokens,
+            temperature=0.2
         )
 
         # ── Middleware stack (same as v1 but with improved defaults) ──
@@ -326,7 +327,8 @@ class CareerAgent:
         
         Separated for cleaner timeout/cancellation handling.
         """
-        done_sent = False  # Guard: on_chain_end fires once per sub-chain
+        content_emitted = False  # Track if any content has been emitted
+        root_chain_ended = False  # Track if the root LangGraph has ended
         try:
             async for evt in self.agent.astream_events(
                 {"messages": messages},
@@ -335,6 +337,7 @@ class CareerAgent:
             ):
                 kind = evt.get("event", "")
                 name = evt.get("name", "")
+                print(f"Received event: {kind} | name: {name} ")  # Debug log for incoming events
 
                 # ── Token streaming (primary output) ──
                 if kind == "on_chat_model_stream":
@@ -342,6 +345,7 @@ class CareerAgent:
                     if hasattr(chunk, "content") and chunk.content:
                         content = self._extract_content(chunk.content)
                         if content:
+                            content_emitted = True
                             metrics.tokens_streamed += len(content.split())
                             yield format_sse_event(
                                 SSEEventType.TOKEN,
@@ -358,11 +362,31 @@ class CareerAgent:
                 elif kind == "on_tool_end":
                     logger.debug("✓ Tool end | tool=%s", name)
                 
-                # ── Final answer (only first occurrence; sub-chains fire this too) ──
-                elif kind == "on_chain_end" and not done_sent:
-                    done_sent = True
-                    # Tokens are already fully streamed via on_chat_model_stream,
-                    # so we only emit the completion signal here.
+                # ── Fallback: extract content from model node output when streaming events aren't available ──
+                elif kind == "on_chain_end" and name == "model" and not content_emitted:
+                    content = self._extract_content_from_model_output(evt["data"].get("output"))
+                    if content:
+                        content_emitted = True
+                        metrics.tokens_streamed += len(content.split())
+                        yield format_sse_event(
+                            SSEEventType.TOKEN,
+                            {"content": content},
+                        )
+                
+                # ── Final answer — only on the root LangGraph chain end ──
+                elif kind == "on_chain_end" and name == "LangGraph" and not root_chain_ended:
+                    root_chain_ended = True
+                    # Final fallback: if still no content, try extracting from final state
+                    if not content_emitted:
+                        content = self._extract_content_from_final_state(evt["data"].get("output"))
+                        if content:
+                            content_emitted = True
+                            metrics.tokens_streamed += len(content.split())
+                            yield format_sse_event(
+                                SSEEventType.TOKEN,
+                                {"content": content},
+                            )
+                    
                     yield format_sse_event(SSEEventType.DONE, {"content": ""})
                     self.circuit_breaker.record_success()
                 
@@ -408,3 +432,86 @@ class CareerAgent:
         
         # Fallback
         return str(chunk_content) if chunk_content else ""
+
+    @staticmethod
+    def _extract_content_from_model_output(output: Any) -> str:
+        """Extract AI message content from a model node's on_chain_end output.
+        
+        The model node returns a list of Command objects with state updates.
+        The first Command's update contains messages including the AIMessage.
+        """
+        if not output:
+            return ""
+        
+        # Output is typically a list of Command objects
+        if isinstance(output, list) and len(output) > 0:
+            first_cmd = output[0]
+            # Command has an 'update' dict with 'messages' key
+            if hasattr(first_cmd, "update") and isinstance(first_cmd.update, dict):
+                messages = first_cmd.update.get("messages", [])
+                return CareerAgent._extract_last_ai_content(messages)
+            # Fallback: try dict access
+            if isinstance(first_cmd, dict):
+                update = first_cmd.get("update", {})
+                if isinstance(update, dict):
+                    messages = update.get("messages", [])
+                    return CareerAgent._extract_last_ai_content(messages)
+        
+        return ""
+
+    @staticmethod
+    def _extract_content_from_final_state(output: Any) -> str:
+        """Extract AI message content from the root LangGraph's final state output.
+        
+        The final state contains all messages; we extract the last AIMessage.
+        """
+        if not output:
+            return ""
+        
+        # The output is the final state dict with messages
+        if isinstance(output, dict):
+            messages = output.get("messages", [])
+            return CareerAgent._extract_last_ai_content(messages)
+        
+        return ""
+
+    @staticmethod
+    def _extract_last_ai_content(messages: list) -> str:
+        """Extract content from the last AIMessage in a messages list.
+        
+        Handles both string content and multi-modal content lists like:
+            [{"type": "text", "text": "Hello"}, {"type": "text", "text": " world"}]
+        """
+        if not messages:
+            return ""
+        for msg in reversed(messages):
+            if hasattr(msg, "type") and msg.type == "ai":
+                content = getattr(msg, "content", None)
+            elif isinstance(msg, dict) and msg.get("type") == "ai":
+                content = msg.get("content", "")
+            else:
+                continue
+            
+            if not content:
+                continue
+            
+            # String content
+            if isinstance(content, str):
+                return content
+            
+            # Multi-modal list content: [{"type": "text", "text": "..."}, ...]
+            if isinstance(content, list):
+                parts = []
+                for block in content:
+                    if isinstance(block, dict):
+                        # Try "text" key first, then "content"
+                        parts.append(str(block.get("text", block.get("content", ""))))
+                    elif isinstance(block, str):
+                        parts.append(block)
+                text = "".join(parts).strip()
+                if text:
+                    return text
+            
+            # Fallback: convert to string
+            return str(content)
+        return ""

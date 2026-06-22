@@ -8,7 +8,6 @@ import logging
 import re
 from pydantic import BaseModel, Field
 
-from langchain_core.tools import tool
 from langchain_core.messages import HumanMessage
 
 from app.services.pdf_service import PDFParsingService
@@ -54,34 +53,25 @@ class CompareSkillsInput(BaseModel):
 # compare_skills is an exception — it uses an LLM for deep semantic analysis.
 
 
-@tool("extract_resume_text", args_schema=ExtractResumeTextInput)
 def extract_resume_text(pdf_path: str) -> str:
-    """Extract raw text content from a PDF resume file. CRITICAL: Only call this tool when you can see a `[File saved to: ...]` or `[Resume file uploaded: ...]` marker in the conversation. If there is no such marker, do NOT call this tool — ask the user to upload their resume PDF first. If you already have the resume text in context (from a previous turn or the current message), you do NOT need to call this tool."""
-    # 1. Check pre-warmed cache (set by route handler at upload time)
-    prewarm_key = "prewarm:extract_resume_text"
-    if prewarm_key in _tool_cache:
-        logger.info("📄 Returning pre-warmed resume text from route handler")
-        return _tool_cache[prewarm_key]
-
-    # 2. Check pdf_path-based cache (set by a prior invocation)
-    cache_key = f"extract_resume_text:{pdf_path}"
-    if cache_key in _tool_cache:
-        logger.info("📄 Returning cached resume text for %s", pdf_path)
-        return _tool_cache[cache_key]
+    """Extract raw text content from a PDF resume file. 
+    CRITICAL: Only call this tool when you can see a `[File saved to: ...]` or `[Resume file uploaded: ...]` marker in the conversation. 
+    If there is no such marker, do NOT call this tool — ask the user to upload their resume PDF first. 
+    If you already have the resume text in context (from a previous turn or the current message), 
+    you do NOT need to call this tool.
+    """
 
     logger.info("📄 Extracting resume text from %s (cache miss)", pdf_path)
     try:
         text = PDFParsingService.extract_text_from_pdf(pdf_path)
         if not text or len(text.strip()) < 50:
             return "Error: Could not extract sufficient text from PDF."
-        _tool_cache[cache_key] = text
         return text
     except Exception as e:
         logger.exception("PDF extraction failed")
         return f"Error extracting PDF: {str(e)}"
 
 
-@tool("parse_job_description")
 def parse_job_description(job_description: str) -> str:
     """Clean and normalise a raw job description into plain text (remove HTML, excess whitespace, etc.). Call this tool AT MOST ONCE per job description — if you already have a parsed/cleaned version from a previous call, do NOT call it again. Do NOT call this tool if the job description is already clean plain text."""
     logger.info("🔍 Cleaning job description…")
@@ -92,7 +82,6 @@ def parse_job_description(job_description: str) -> str:
     return text if text else "Empty job description provided."
 
 
-@tool("extract_resume_skills")
 def extract_resume_skills(resume_text: str) -> str:
     """Extract skills, experience and project mentions from resume text using pattern matching (no LLM). Call this tool AT MOST ONCE per resume — if you have already called it and have the extracted profile, do NOT call it again. This tool is OPTIONAL — only use it if you need a distilled skill profile for analysis."""
     logger.info("📋 Extracting resume profile…")
@@ -106,7 +95,6 @@ def extract_resume_skills(resume_text: str) -> str:
     return "\n\n".join(result_parts) if result_parts else resume_text[:5000]
 
 
-@tool("extract_projects")
 def extract_projects(resume_text: str) -> str:
     """Extract project-related sections from resume text using simple heuristics (no LLM). Call this tool AT MOST ONCE per resume. Only use if you need specific project details for interview prep or cover letters. Skip this tool for simple resume rewrites."""
     logger.info("📁 Extracting projects from resume…")
@@ -129,7 +117,6 @@ def extract_projects(resume_text: str) -> str:
     return resume_text[:3000]
 
 
-@tool("compare_skills", args_schema=CompareSkillsInput)
 def compare_skills(job_requirements: str, user_profile: str) -> str:
     """Use an LLM to deeply compare a candidate profile against a job description. Returns structured ATS analysis including matched/missing skills, score, and tailored recommendations. CRITICAL: Call this tool AT MOST ONCE per comparison. Only call it when you have BOTH an extracted/parsed job description AND a resume profile. NEVER call this tool multiple times with the same inputs."""
     logger.info("⚖️  Comparing skills via LLM…")

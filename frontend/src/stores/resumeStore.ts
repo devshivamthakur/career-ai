@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import type { ResumeStage } from '../types/api';
+import { stripTrailingCommentary } from '../utils/cleanup';
 
 interface ResumeState {
   file: File | null;
@@ -52,8 +53,8 @@ export const useResumeStore = create<ResumeState>((set) => ({
   setComplete: (resume) =>
     set({
       stage: 'complete',
-      tailoredResume: resume,
-      streamedResume: resume,
+      tailoredResume: stripTrailingCommentary(resume),
+      streamedResume: stripTrailingCommentary(resume),
       isStreaming: false,
     }),
 

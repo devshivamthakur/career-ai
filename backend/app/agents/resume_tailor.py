@@ -211,6 +211,67 @@ class ResumeTailorAgent:
             clean.append(line)
 
         cleaned = "\n".join(clean).strip()
+
+        # ── Strip trailing conversational / post-resume commentary ──
+        # The LLM sometimes appends suggestions or meta-commentary after
+        # the resume content.  Detect a known set of lead-in phrases and
+        # truncate everything from the first matching line onward.
+        _trailing_patterns = [
+            "this tailored version",
+            "this version emphasizes",
+            "this resume emphasizes",
+            "i've tailored",
+            "i have tailored",
+            "here's what i emphasized",
+            "here is what i emphasized",
+            "here's what was emphasized",
+            "let me know if you",
+            "would you like me to",
+            "would you like to",
+            "feel free to ask",
+            "do you want me to",
+            "you may want to",
+            "you might want to",
+            "i recommend",
+            "some suggestions",
+            "key changes",
+            "what i changed",
+            "changes made",
+            "adjustments made",
+            "here's a summary",
+            "here is a summary",
+            "overview of changes",
+            "i focused on",
+            "the focus was on",
+            "i can also",
+            "i can further",
+            "i can adjust",
+            "i'm happy to",
+            "i am happy to",
+            "does this work",
+            "does this look",
+            "is there anything",
+            "please let me know",
+            "tell me if you",
+        ]
+
+        # Scan from the end of the document for the first trailing line
+        truncate_at: int | None = None
+        for i, line in enumerate(clean):
+            stripped = line.strip()
+            lower_stripped = stripped.lower()
+            # Skip empty lines at boundaries
+            if not stripped:
+                continue
+            # Check if this line matches a trailing pattern
+            if any(lower_stripped.startswith(p) for p in _trailing_patterns):
+                truncate_at = i
+                break
+
+        if truncate_at is not None:
+            clean = clean[:truncate_at]
+
+        cleaned = "\n".join(clean).strip()
         # Remove leading/trailing blank lines
         return cleaned.strip()
 

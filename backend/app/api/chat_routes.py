@@ -16,7 +16,7 @@ from typing import Optional
 
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException, status, Request
 from fastapi.responses import StreamingResponse
-from langchain_core.messages import HumanMessage, AIMessage, BaseMessage
+from langchain_core.messages import HumanMessage, AIMessage, SystemMessage, BaseMessage
 
 from app.agents.unified_agent import CareerAgent
 from app.services.chat_session import (
@@ -29,8 +29,65 @@ from app.services.chat_session import (
     has_resume_file,
     save_resume_file,
     get_resume_context,
+    save_resume_file_in_storage,
 )
 from app.utils.helpers import sanitise_user_input
+
+
+# ── Greeting / casual-chat pre-check ────────────────────────────
+# Prevents unnecessary tool calls for simple messages like "hi", "hello", etc.
+# The agent is designed for career-related tasks; casual chat bypasses the agent.
+
+_GREETING_RESPONSES: list[str] = [
+    "👋 Hi! I'm **CareerAI**, your personal career assistant. I help with resume tailoring, cover letters, interview prep, and career advice. How can I help you today?",
+    "Hello! 👋 I'm CareerAI. I can help you tailor your resume, write cover letters, prepare for interviews, or analyse your skills for a specific role. What would you like help with?",
+    "Hi there! 👋 I'm CareerAI — ready to help you land your dream job. Just upload your resume (PDF) and share a job description, and I'll handle the rest!",
+]
+
+_GREETING_PATTERNS: list[re.Pattern] = [
+    re.compile(r'^(hi|hello|hey|sup|yo|howdy|greetings)[\s!.,;:?]*$', re.IGNORECASE),
+    re.compile(r'^(good\s+(morning|afternoon|evening))[\s!.,;:?]*$', re.IGNORECASE),
+    re.compile(r'^how\s+are\s+you[\s!.,;:?]*$', re.IGNORECASE),
+    re.compile(r"^what'?s?\s+up[\s!.,;:?]*$", re.IGNORECASE),
+    re.compile(r'^nice\s+to\s+meet\s+you[\s!.,;:?]*$', re.IGNORECASE),
+    re.compile(r'^(ok|okay|thanks|thank\s+you|ty|thx)[\s!.,;:?]*$', re.IGNORECASE),
+    re.compile(r'^can\s+you\s+help\s+me[\s!.,;:?]*$', re.IGNORECASE),
+]
+
+# Career-related keywords — if message contains any of these, DO NOT short-circuit
+_CAREER_KEYWORDS: list[str] = [
+    "resume", "cv", "curriculum", "cover letter", "job", "career", "interview",
+    "application", "role", "position", "skill", "ats", "hire", "recruit",
+    "employ", "work", "experience", "project", "portfolio", "linkedin",
+    "job description", "jd", "qualification", "salary", "offer", "promotion",
+]
+
+
+def _is_casual_chat(message: str) -> bool:
+    """Return True if message is a greeting/simple chat that doesn't need the agent."""
+    msg = message.strip().lower()
+
+    # If the message contains career-related keywords, always route to agent
+    for kw in _CAREER_KEYWORDS:
+        if kw in msg:
+            return False
+
+    # Check greeting patterns
+    for pattern in _GREETING_PATTERNS:
+        if pattern.match(msg):
+            return True
+
+    # Very short messages that are clearly just acknowledgments
+    if msg in {"ok", "okay", "thanks", "thank you", "ty", "thx", "np", "sure", "yes", "no", "yep", "nope"}:
+        return True
+
+    return False
+
+
+def _pick_greeting_response() -> str:
+    """Pick a random greeting response."""
+    import random
+    return random.choice(_GREETING_RESPONSES)
 
 
 # ── Resume extraction helpers ────────────────────────────────────
@@ -316,15 +373,6 @@ async def chat_stream(
     # This eliminates redundant tool calls and avoids middleware-limit errors.
     temp_path = None
     if file and file.filename:
-        # Reject if a file was already uploaded in this session
-        if has_resume_file(session_id):
-            raise HTTPException(
-                status_code=400,
-                detail=(
-                    "You already uploaded a resume file in this chat. "
-                    "If you need to use a different resume, please start a new chat session."
-                ),
-            )
 
         if file.content_type != "application/pdf":
             raise HTTPException(status_code=400, detail="Only PDF files are accepted")
@@ -349,8 +397,10 @@ async def chat_stream(
                     ),
                 )
 
-            # Save to session — this marks the session as having a resume
-            save_resume_file(session_id, file.filename, resume_text)
+            #save the pdf in storage folder to use in future if needed
+            temp_path = save_resume_file_in_storage(pdf_bytes)
+            # # Save to session — this marks the session as having a resume
+            # save_resume_file(session_id, file.filename, resume_text)
 
             # Warm the in-memory tool cache so even if the agent calls the tool,
             # it returns instantly without hitting middleware limits.
@@ -358,7 +408,7 @@ async def chat_stream(
             _warm_tool_cache("extract_resume_text", resume_text)
 
             final_message = (
-                f"[Resume file uploaded: {file.filename}]\n"
+                f"[Resume file uploaded: {temp_path}]\n"
                 f"[Resume text extracted successfully ({len(resume_text)} chars). "
                 f"The text is already provided in the context below — "
                 f"you do NOT need to call extract_resume_text.]\n\n"
@@ -378,51 +428,54 @@ async def chat_stream(
                 detail=f"Failed to process resume PDF: {str(e)[:200]}",
             )
     else:
-        # No file uploaded — check if we already have resume text in the session
-        resume_ctx = get_resume_context(session_id)
-        if resume_ctx:
+            #update the final message to include the user message only if no file is uploaded
+            #ask for agent check for history if the session has a resume file, if yes then include the resume context in the final message
             final_message = (
-                f"{resume_ctx}\n\n"
-                f"═══════════════ USER MESSAGE ═══════════════\n"
-                f"{message}\n"
-                f"═════════════ END USER MESSAGE ═════════════"
-            )
-        else:
-            final_message = (
-                f"[The user did NOT upload a resume PDF file. "
-                f"You have NO resume text available — do NOT call any tool that requires resume text "
-                f"(extract_resume_text, extract_resume_skills, extract_projects, compare_skills). "
-                f"Without a resume PDF, these tools cannot produce meaningful results. "
-                f"If the user asks for resume-related help, let them know they need to upload their resume PDF first.]\n\n"
-                f"═══════════════ USER MESSAGE ═══════════════\n"
-                f"{message}\n"
-                f"═════════════ END USER MESSAGE ═════════════"
+            f"═══════════════ USER MESSAGE ═══════════════\n"
+            f"{message}\n"
+            f"═════════════ END USER MESSAGE ═════════════"
             )
 
     # Save the original user message (without system instruction prefix) to session
     # so chat history stays clean when reloaded on page refresh.
-    save_message(session_id, "user", message)
 
     # Build context messages for the LLM (summary + last N + new message)
     # Use final_message here so the LLM receives the system instructions.
-    context_messages = get_context_messages(session_id, final_message)
+    context_messages = get_context_messages(session_id, final_message, temp_path if file else None)
+    save_message(session_id, "user", message, filename=temp_path if file else None)
 
     async def event_stream():
         full_assistant_content = ""
         # Store user's original message for trigger detection
         user_original_message = message
         try:
+            # ── Greeting / casual-chat pre-check ──
+            # Short-circuit the agent entirely to avoid unnecessary tool calls
+            if not file and _is_casual_chat(message) and len(context_messages) == 1:
+                greeting = _pick_greeting_response()
+                # Emit greeting as a single token event, then done
+                yield f"event: token\ndata: {json.dumps({'content': greeting})}\n\n"
+                yield f"event: done\ndata: {json.dumps({'content': ''})}\n\n"
+                return
+            
             # Convert context dicts to LangChain message objects
             lc_messages: list[BaseMessage] = []
             for ctx_msg in context_messages:
                 if ctx_msg["role"] == "user":
-                    lc_messages.append(HumanMessage(content=ctx_msg["content"]))
+                    # Use multi-part content blocks — accepts plain text only (no custom dict keys).
+                    # When a file is associated, append it as a second text block.
+                    parts = [{"type": "text", "text": ctx_msg["content"]}]
+                    if ctx_msg.get("resumefile"):
+                        parts.append({
+                            "type": "text",
+                            "text": f"[resume file: {ctx_msg['resumefile']}]"
+                        })
+                    lc_messages.append(HumanMessage(content=parts))
                 elif ctx_msg["role"] == "assistant":
                     lc_messages.append(AIMessage(content=ctx_msg["content"]))
                 elif ctx_msg["role"] == "system":
-                    # Wrap system context as a human message with prefix
-                    lc_messages.append(HumanMessage(content=ctx_msg["content"]))
-
+                    lc_messages.append(SystemMessage(content=ctx_msg["content"]))
+            print("LC MESSAGES:", lc_messages)        
             async for sse_line in agent.stream_sse(lc_messages, thread_id=session_id):
                 if await request.is_disconnected():
                     logger.warning("Client disconnected")
@@ -471,12 +524,7 @@ async def chat_stream(
             clean_content = strip_resume_markers(full_assistant_content) if full_assistant_content.strip() else ""
             if clean_content:
                 save_message(session_id, "assistant", clean_content)
-            # Cleanup temp file
-            if temp_path and os.path.exists(temp_path):
-                try:
-                    os.unlink(temp_path)
-                except Exception:
-                    pass
+            
 
     return StreamingResponse(
         event_stream(),

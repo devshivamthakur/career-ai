@@ -92,7 +92,7 @@ def get_session(session_id: str) -> Optional[dict]:
         return json.load(f)
 
 
-def save_message(session_id: str, role: str, content: str):
+def save_message(session_id: str, role: str, content: str, filename: Optional[str] = None):
     """Append a message to the session."""
     session = get_session(session_id)
     if session is None:
@@ -103,11 +103,14 @@ def save_message(session_id: str, role: str, content: str):
             "messages": [],
             "summary": "",
         }
+    messageId = str(uuid.uuid4())
 
     session["messages"].append({
         "role": role,
         "content": content,
         "timestamp": datetime.now(timezone.utc).isoformat(),
+        "id": messageId,
+        "file": filename
     })
     session["updated_at"] = datetime.now(timezone.utc).isoformat()
 
@@ -153,7 +156,7 @@ def _rollup_summary(session: dict):
     )
 
 
-def get_context_messages(session_id: str, new_message: str) -> list[dict]:
+def get_context_messages(session_id: str, new_message: str, file_path: Optional[str] = None) -> list[dict]:
     """
     Build the message list for the LLM:
       - Summary of older conversation (if any)
@@ -173,15 +176,15 @@ def get_context_messages(session_id: str, new_message: str) -> list[dict]:
     if session.get("summary"):
         context.append({
             "role": "user",
-            "content": f"[Previous conversation summary]:\n{session['summary']}",
+            "content": f"[Previous conversation summary]:\n{session['summary']}"
         })
 
     # 2. Last N messages (most recent first preserved order)
     for msg in session["messages"]:
-        context.append({"role": msg["role"], "content": msg["content"]})
+        context.append({"role": msg["role"], "content": msg["content"], "resumefile": msg.get("file", None)})
 
     # 3. The new user message
-    context.append({"role": "user", "content": new_message})
+    context.append({"role": "user", "content": new_message, "resumefile": file_path})
 
     return context
 
@@ -245,3 +248,15 @@ def get_resume_context(session_id: str) -> Optional[str]:
         f"{resume['content']}\n"
         f"[End of resume text. You already have this data — do NOT call extract_resume_text again.]"
     )
+
+
+def save_resume_file_in_storage(byteCode):
+    """Save the uploaded resume file in the storage folder and return the filename."""
+    storage_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "storage")
+    os.makedirs(storage_dir, exist_ok=True)
+    filename = f"resume_{uuid.uuid4().hex[:12]}.pdf"
+    path = os.path.join(storage_dir, filename)
+    with open(path, "wb") as f:
+        f.write(byteCode)
+    logger.info("Saved resume file to storage: %s", path)
+    return f"storage/{filename}"

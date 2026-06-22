@@ -5,6 +5,7 @@ import { useChatSession } from '../hooks/useChatSession';
 import { useSseStream } from '../hooks/useSseStream';
 import { ChatWindow } from '../components/chat/ChatWindow';
 import { InputBar } from '../components/chat/InputBar';
+import { stripTrailingCommentary } from '../utils/cleanup';
 
 
 const API_ORIGIN = import.meta.env.VITE_API_URL ?? '';
@@ -34,6 +35,8 @@ function extractResumeFromText(text: string): string | null {
   }
   return null;
 }
+
+// ── stripTrailingCommentary is imported from ../utils/cleanup ───
 
 let messageCounter = 0;
 
@@ -69,11 +72,12 @@ export default function ChatPage() {
       if (!sessionId) return;
 
       // Add user message
-      const userMsg = {
+      const userMsg: import('../types/api').ChatMessage = {
         id: generateId(),
         role: 'user' as const,
         content: message,
         timestamp: new Date().toISOString(),
+        file: attachedFile?.name,
       };
       addMessage(userMsg);
 
@@ -184,12 +188,27 @@ export default function ChatPage() {
           // (in case the backend `resume_ready` event wasn't emitted)
           const { messages: currentMsgs, resumeUploaded: alreadyUploaded } = useChatStore.getState();
           const lastMsg = currentMsgs[currentMsgs.length - 1];
-          if (lastMsg && lastMsg.role === 'assistant' && !lastMsg.resumeContent) {
-            const extracted = extractResumeFromText(lastMsg.content);
-            if (extracted) {
-              setResumeContent(extracted);
-              if (!alreadyUploaded) {
-                setResumeUploaded(true);
+          if (lastMsg && lastMsg.role === 'assistant') {
+            // Strip trailing conversational text from the message
+            const cleaned = stripTrailingCommentary(lastMsg.content);
+            if (cleaned !== lastMsg.content) {
+              // Update the message content in the store
+              useChatStore.setState((state) => {
+                const msgs = [...state.messages];
+                const idx = msgs.length - 1;
+                if (idx >= 0 && msgs[idx].id === lastMsg.id) {
+                  msgs[idx] = { ...msgs[idx], content: cleaned };
+                }
+                return { messages: msgs };
+              });
+            }
+            if (!lastMsg.resumeContent) {
+              const extracted = extractResumeFromText(cleaned);
+              if (extracted) {
+                setResumeContent(extracted);
+                if (!alreadyUploaded) {
+                  setResumeUploaded(true);
+                }
               }
             }
           }

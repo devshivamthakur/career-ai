@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 # Constants & Configuration
 # ───────────────────────────────────────────────────────────────────────
 
-DEFAULT_MAX_PAGES = 50
+DEFAULT_MAX_PAGES = 2
 DEFAULT_MIN_TEXT_LENGTH = 50
 MAX_FILE_SIZE_FOR_CACHE_MB = 5
 

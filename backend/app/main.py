@@ -1,4 +1,5 @@
 import logging
+import os
 import sys
 
 # Basic logging configuration to stream to stdout
@@ -9,6 +10,7 @@ from fastapi import Depends, FastAPI, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.core.config import settings
@@ -161,6 +163,11 @@ def get_application() -> FastAPI:
     app.include_router(api_router, prefix="/api")
     app.include_router(assistant_router, dependencies=[Depends(rate_limit_dependency)])
     app.include_router(chat_router, dependencies=[Depends(rate_limit_dependency)])
+
+    # ── Serve uploaded files (resume PDFs) ─────────────────────
+    storage_path = os.path.join(os.path.dirname(__file__), "storage")
+    os.makedirs(storage_path, exist_ok=True)
+    app.mount("/storage", StaticFiles(directory=storage_path), name="storage")
 
     return app
 
