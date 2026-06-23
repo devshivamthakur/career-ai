@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { generateCoverLetterUrl } from '../api/client';
 import { useSseStream } from '../hooks/useSseStream';
 import { useToastStore } from '../stores/toastStore';
@@ -16,7 +16,12 @@ export default function CoverLetterPage() {
   const accumulatedRef = useRef('');
 
   const showToast = useToastStore((s) => s.showToast);
-  const { start, isStreaming } = useSseStream();
+  const { start, stop, isStreaming } = useSseStream();
+
+  // Abort any in-flight stream when navigating away
+  useEffect(() => {
+    return () => stop();
+  }, [stop]);
 
   const canGenerate =
     company.trim().length > 0 &&

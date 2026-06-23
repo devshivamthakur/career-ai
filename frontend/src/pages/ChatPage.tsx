@@ -1,4 +1,4 @@
-import { useCallback, useRef } from 'react';
+import { useCallback, useRef, useEffect } from 'react';
 import { useChatStore } from '../stores/chatStore';
 import { useToastStore } from '../stores/toastStore';
 import { useChatSession } from '../hooks/useChatSession';
@@ -62,14 +62,23 @@ export default function ChatPage() {
     resumeUploaded,
   } = useChatStore();
 
+  // Guard against concurrent sends (e.g., Enter + click in same tick)
+  const sendingRef = useRef(false);
+
   // Track tool call IDs for the current stream
   const toolCallIdRef = useRef<string | null>(null);
   const toolCallNameRef = useRef<string | null>(null);
   const toolStartTimeRef = useRef<number>(0);
 
+  // Abort any in-flight stream when navigating away
+  useEffect(() => {
+    return () => stop();
+  }, [stop]);
+
   const handleSend = useCallback(
     (message: string) => {
-      if (!sessionId) return;
+      if (!sessionId || sendingRef.current) return;
+      sendingRef.current = true;
 
       // Add user message
       const userMsg: import('../types/api').ChatMessage = {
@@ -212,9 +221,11 @@ export default function ChatPage() {
               }
             }
           }
+          sendingRef.current = false;
           setStreaming(false);
         },
         onError: (error) => {
+          sendingRef.current = false;
           // If the error is about duplicate file upload, ensure flag is set
           // (the backend rejected it because a resume was already uploaded).
           if (error.toLowerCase().includes('already uploaded')) {
@@ -241,6 +252,7 @@ export default function ChatPage() {
   );
 
   const handleStop = useCallback(() => {
+    sendingRef.current = false;
     stop();
     setStreaming(false);
   }, [stop, setStreaming]);

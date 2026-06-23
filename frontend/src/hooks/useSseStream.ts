@@ -62,6 +62,9 @@ export function useSseStream() {
         },
       };
 
+      // Prevent fetchEventSource from reconnecting on tab visibility changes
+      options.openWhenHidden = true;
+
       if (body instanceof FormData) {
         options.body = body;
       } else {
@@ -80,8 +83,12 @@ export function useSseStream() {
         onError(err instanceof Error ? err.message : 'Connection lost');
       }
     } finally {
-      setIsStreaming(false);
-      abortRef.current = null;
+      // Only update state if we're still the active controller —
+      // a newer stream may have started if start() was called again
+      if (abortRef.current === controller) {
+        setIsStreaming(false);
+        abortRef.current = null;
+      }
     }
   }, []);
 

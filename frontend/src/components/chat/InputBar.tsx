@@ -132,7 +132,7 @@ export function InputBar({
         ) : (
           <button
             onClick={handleSend}
-            disabled={!input.trim() || disabled}
+            disabled={!input.trim() || isStreaming || disabled}
             className="p-2 rounded-lg bg-accent text-white hover:bg-accent/80 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
             title="Send message"
           >

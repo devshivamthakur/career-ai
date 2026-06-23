@@ -475,7 +475,6 @@ async def chat_stream(
                     lc_messages.append(AIMessage(content=ctx_msg["content"]))
                 elif ctx_msg["role"] == "system":
                     lc_messages.append(SystemMessage(content=ctx_msg["content"]))
-            print("LC MESSAGES:", lc_messages)        
             async for sse_line in agent.stream_sse(lc_messages, thread_id=session_id):
                 if await request.is_disconnected():
                     logger.warning("Client disconnected")

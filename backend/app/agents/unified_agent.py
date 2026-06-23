@@ -337,7 +337,6 @@ class CareerAgent:
             ):
                 kind = evt.get("event", "")
                 name = evt.get("name", "")
-                print(f"Received event: {kind} | name: {name} ")  # Debug log for incoming events
 
                 # ── Token streaming (primary output) ──
                 if kind == "on_chat_model_stream":

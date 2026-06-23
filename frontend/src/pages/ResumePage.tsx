@@ -1,4 +1,4 @@
-import { useCallback } from 'react';
+import { useCallback, useEffect } from 'react';
 import { useResumeStore } from '../stores/resumeStore';
 import { useResumeStream } from '../hooks/useResumeStream';
 import { useToastStore } from '../stores/toastStore';
@@ -21,8 +21,13 @@ export default function ResumePage() {
     setJobDescription,
   } = useResumeStore();
 
-  const { startStream } = useResumeStream();
+  const { startStream, stopStream } = useResumeStream();
   const showToast = useToastStore((s) => s.showToast);
+
+  // Abort any in-flight stream when navigating away
+  useEffect(() => {
+    return () => stopStream();
+  }, [stopStream]);
 
   const canTailor = file !== null && jobDescription.trim().length >= 50 && !isStreaming;
 
