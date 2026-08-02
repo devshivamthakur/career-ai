@@ -385,7 +385,7 @@ run_migrations_remote() {
     info "Running Alembic migrations on EC2..."
     ec2_ssh "
         cd ${EC2_APP_DIR} && \
-        docker compose -f ${EC2_COMPOSE_FILE} exec -T api uv run alembic upgrade head
+        docker-compose -f ${EC2_COMPOSE_FILE} exec -T api uv run alembic upgrade head
     " && pass "Migrations applied successfully." || warn "Migration command failed (check DB connection)."
 }
 
@@ -444,7 +444,7 @@ cmd_status() {
 cmd_logs() {
     check_prerequisites logs
     info "Tailing logs for careerai-api on ${EC2_HOST}..."
-    ec2_ssh "cd ${EC2_APP_DIR} && docker compose -f ${EC2_COMPOSE_FILE} logs -f api"
+    ec2_ssh "cd ${EC2_APP_DIR} && docker-compose -f ${EC2_COMPOSE_FILE} logs -f api"
 }
 
 # =============================================================================
