@@ -293,8 +293,8 @@ COMPOSE
     info "Restarting containers..."
     ec2_ssh "
         cd ${EC2_APP_DIR} && \
-        docker compose -f ${EC2_COMPOSE_FILE} down --remove-orphans && \
-        docker compose -f ${EC2_COMPOSE_FILE} up -d
+        docker-compose -f ${EC2_COMPOSE_FILE} down --remove-orphans && \
+        docker-compose -f ${EC2_COMPOSE_FILE} up -d
     "
     pass "Containers restarted."
 
@@ -483,8 +483,8 @@ cmd_rollback() {
         docker pull ${FULL_IMAGE}:${PREV_TAG} && \
         docker tag ${FULL_IMAGE}:${PREV_TAG} ${FULL_IMAGE}:${LATEST_TAG} && \
         cd ${EC2_APP_DIR} && \
-        docker compose -f ${EC2_COMPOSE_FILE} down --remove-orphans && \
-        docker compose -f ${EC2_COMPOSE_FILE} up -d
+        docker-compose -f ${EC2_COMPOSE_FILE} down --remove-orphans && \
+        docker-compose -f ${EC2_COMPOSE_FILE} up -d
     "
 
     health_check

@@ -5,23 +5,30 @@ import tailwindcss from '@tailwindcss/vite'
 // Content-Security-Policy meta — injected ONLY into production builds.
 // Dev mode needs inline scripts (React Refresh preamble) and HMR WebSockets,
 // so applying CSP there would break the dev server.
-function productionCspPlugin(): Plugin {
-  const CSP = [
-    "default-src 'self'",
-    "script-src 'self'",
-    "style-src 'self' 'unsafe-inline'",
-    "img-src 'self' data:",
-    "font-src 'self' https://fonts.gstatic.com",
-    "connect-src 'self'",
-    "frame-ancestors 'none'",
-    "base-uri 'self'",
-    "form-action 'self'",
-  ].join('; ');
-
+//
+// NOTE: `frame-ancestors` is deliberately omitted — it is ignored when
+// delivered via a <meta> element (header-only directive).
+function productionCspPlugin(apiOrigin: string): Plugin {
   return {
     name: 'inject-production-csp',
     transformIndexHtml(html, ctx) {
       if (ctx.server) return html; // dev server — skip
+
+      // Backend API origin for fetch/SSE connections (same-origin falls back
+      // to 'self' automatically, so an empty string is safe).
+      const connectSrc = apiOrigin ? `'self' ${apiOrigin}` : "'self'";
+
+      const CSP = [
+        "default-src 'self'",
+        "script-src 'self'",
+        "style-src 'self' 'unsafe-inline'",
+        "img-src 'self' data:",
+        "font-src 'self' https://fonts.gstatic.com",
+        `connect-src ${connectSrc}`,
+        "base-uri 'self'",
+        "form-action 'self'",
+      ].join('; ');
+
       return html.replace(
         '</head>',
         `    <meta http-equiv="Content-Security-Policy" content="${CSP}" />\n  </head>`,
@@ -34,7 +41,7 @@ export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
   const proxyTarget = env.VITE_API_URL || 'http://localhost:8000';
   return {
-    plugins: [react(), tailwindcss(), productionCspPlugin()],
+    plugins: [react(), tailwindcss(), productionCspPlugin(env.VITE_API_URL || '')],
     server: {
       port: 5173,
       proxy: {
