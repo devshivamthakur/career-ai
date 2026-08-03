@@ -27,4 +27,5 @@ dependencies = [
     "python-multipart>=0.0.29",
     "botocore[crt]>=1.43.28",
     "markdown-pdf>=1.13.2",
+    "gunicorn>=26.0.0",
 ]

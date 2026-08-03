@@ -1,6 +1,14 @@
 from pydantic import BaseModel, Field, constr
 from typing import Optional
 
+from app.utils.constants import (
+    MAX_COMPANY_LENGTH,
+    MAX_JOB_DESCRIPTION_LENGTH,
+    MAX_RESUME_TEXT_LENGTH,
+    MAX_ROLE_LENGTH,
+    MIN_JOB_DESCRIPTION_LENGTH,
+)
+
 # Pydantic model for the result of job description validation
 class JDValidationResult(BaseModel):
     """Pydantic model for the result of job description validation."""
@@ -23,10 +31,10 @@ class ResumeExportRequest(BaseModel):
 # ── Career Cover Letter ─────────────────────────────────────
 
 class CoverLetterRequest(BaseModel):
-    job_description: str = Field(..., min_length=50, max_length=5000)
-    company: str = Field(..., min_length=1)
-    role: str = Field(..., min_length=1)
-    resume_text: Optional[str] = None
+    job_description: str = Field(..., min_length=MIN_JOB_DESCRIPTION_LENGTH, max_length=MAX_JOB_DESCRIPTION_LENGTH)
+    company: str = Field(..., min_length=1, max_length=MAX_COMPANY_LENGTH)
+    role: str = Field(..., min_length=1, max_length=MAX_ROLE_LENGTH)
+    resume_text: Optional[str] = Field(default=None, max_length=MAX_RESUME_TEXT_LENGTH)
 
 
 class CoverLetterResponse(BaseModel):
@@ -48,10 +56,10 @@ class InterviewQuestion(BaseModel):
 
 
 class InterviewPrepRequest(BaseModel):
-    job_description: str = Field(..., min_length=50, max_length=5000)
-    role: str = Field(..., min_length=1)
-    company: Optional[str] = None
-    resume_text: Optional[str] = None
+    job_description: str = Field(..., min_length=MIN_JOB_DESCRIPTION_LENGTH, max_length=MAX_JOB_DESCRIPTION_LENGTH)
+    role: str = Field(..., min_length=1, max_length=MAX_ROLE_LENGTH)
+    company: Optional[str] = Field(default=None, max_length=MAX_COMPANY_LENGTH)
+    resume_text: Optional[str] = Field(default=None, max_length=MAX_RESUME_TEXT_LENGTH)
 
 
 class InterviewPrepResponse(BaseModel):

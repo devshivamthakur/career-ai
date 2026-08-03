@@ -5,6 +5,7 @@ import { useToastStore } from '../stores/toastStore';
 import { InterviewAccordion } from '../components/career/InterviewAccordion';
 import { PDFDropZone } from '../components/resume/PDFDropZone';
 import type { InterviewQuestion } from '../types/api';
+import { LIMITS } from '../utils/limits';
 
 export default function InterviewPage() {
   const [role, setRole] = useState('');
@@ -61,8 +62,9 @@ export default function InterviewPage() {
             </label>
             <input
               value={role}
-              onChange={(e) => setRole(e.target.value)}
+              onChange={(e) => setRole(e.target.value.slice(0, LIMITS.MAX_ROLE_LENGTH))}
               placeholder="e.g. Senior Frontend Engineer"
+              maxLength={LIMITS.MAX_ROLE_LENGTH}
               className="w-full bg-bg-base border border-border rounded-lg px-3 py-2.5 text-sm text-text-primary placeholder-text-secondary outline-none focus:border-accent/50 transition-colors"
             />
           </div>
@@ -74,8 +76,9 @@ export default function InterviewPage() {
             </label>
             <input
               value={company}
-              onChange={(e) => setCompany(e.target.value)}
+              onChange={(e) => setCompany(e.target.value.slice(0, LIMITS.MAX_COMPANY_LENGTH))}
               placeholder="Optional — personalizes answers"
+              maxLength={LIMITS.MAX_COMPANY_LENGTH}
               className="w-full bg-bg-base border border-border rounded-lg px-3 py-2.5 text-sm text-text-primary placeholder-text-secondary outline-none focus:border-accent/50 transition-colors"
             />
           </div>

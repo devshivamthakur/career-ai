@@ -13,6 +13,12 @@ class Settings(BaseSettings):
     # Database
     DATABASE_URL: str
 
+    # Connection pool tuning (per gunicorn worker)
+    DB_POOL_SIZE: int = 5
+    DB_MAX_OVERFLOW: int = 10
+    DB_POOL_RECYCLE: int = 1800   # recycle connections every 30 min
+    DB_POOL_TIMEOUT: int = 30     # seconds to wait for a free connection
+
     # Redis Cache
     REDIS_HOST: Optional[str] = None
     REDIS_PORT: int = 6379
@@ -69,7 +75,7 @@ class Settings(BaseSettings):
     # CORS - Allowed origins for frontend access
     # In production, set to your actual frontend domain
     # Example: "https://example.com" or comma-separated list
-    ALLOWED_ORIGINS: str = "http://localhost:5173,http://localhost:3000"
+    ALLOWED_ORIGINS: str = ""
     
     # Security - Hide OpenAPI/Swagger docs in production
     HIDE_DOCS_IN_PRODUCTION: bool = False
@@ -79,11 +85,27 @@ class Settings(BaseSettings):
     
     # API Key for additional authentication (optional)
     API_KEY: Optional[str] = None
+
+    # Allowed Host headers (TrustedHostMiddleware). Comma-separated; "*" allows all.
+    ALLOWED_HOSTS: str = "*"
+
+    @property
+    def allowed_hosts_list(self) -> list[str]:
+        """Parse ALLOWED_HOSTS into a list. "*" means allow all hosts."""
+        if self.ALLOWED_HOSTS.strip() == "*":
+            return ["*"]
+        return [h.strip() for h in self.ALLOWED_HOSTS.split(",") if h.strip()]
+
+    # Maximum accepted request body size (MB) — guards against abuse
+    MAX_BODY_SIZE_MB: int = 15
+    
+    # Emit an access-log line per request (structured, request-id correlated)
+    ENABLE_REQUEST_LOGGING: bool = True
     
     # CORS detailed configuration
     ALLOW_CREDENTIALS: bool = True
     ALLOW_METHODS: list[str] = ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
-    ALLOW_HEADERS: list[str] = ["Content-Type", "Authorization", "X-Request-ID"]
+    ALLOW_HEADERS: list[str] = ["Content-Type", "Authorization", "X-Request-ID", "X-API-Key"]
     
     # Load configuration from the .env file
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")

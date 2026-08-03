@@ -12,6 +12,7 @@ interface ChatState {
   setSessionId: (id: string) => void;
   setMessages: (messages: ChatMessage[]) => void;
   addMessage: (msg: ChatMessage) => void;
+  removeMessages: (ids: string[]) => void;
   appendToken: (text: string) => void;
   addToolCall: (card: ToolCallInfo) => void;
   updateToolCall: (id: string, status: ToolCallInfo['status'], output?: string, duration?: number) => void;
@@ -36,6 +37,11 @@ export const useChatStore = create<ChatState>((set) => ({
 
   addMessage: (msg) =>
     set((state) => ({ messages: [...state.messages, msg] })),
+
+  removeMessages: (ids) =>
+    set((state) => ({
+      messages: state.messages.filter((m) => !ids.includes(m.id)),
+    })),
 
   appendToken: (text) =>
     set((state) => {

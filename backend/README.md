@@ -21,44 +21,68 @@ FastAPI backend for **CareerAI** — an AI-powered job application assistant pro
 
 ```
 ├── app/
+│   ├── main.py                     # Thin app factory (middleware, errors, routers, lifespan)
 │   ├── agents/
 │   │   ├── unified_agent.py        # Unified CareerAgent (LangChain create_agent) — chat, tools, streaming
 │   │   ├── resume_tailor.py        # LangGraph state machine (4 nodes) — resume tailoring workflow
 │   │   ├── career_assistant.py     # Cover letter & interview prep agent
 │   │   └── tools.py                # Agent tools: PDF extraction, skill comparison, resume rewriting, etc.
 │   ├── api/
-│   │   ├── resume_routes.py        # POST /api/resume/tailor/stream, /export-pdf
-│   │   ├── assistant_routes.py     # POST /api/career/cover-letter, /interview-prep
-│   │   ├── chat_routes.py          # POST /api/chat/stream — SSE streaming chat with session management
-│   │   ├── services.py             # Service layer: validation, PDF, streaming, orchestration
-│   │   ├── rate_limit.py           # Redis-backed rate limiter (Token Bucket)
-│   │   ├── config.py               # Circuit breaker, concurrency manager, ServiceConfig
-│   │   └── routes.py               # Shared API router (/api/status)
+│   │   ├── middleware.py           # Request-ID, security headers, access logging, body-size limit
+│   │   ├── errors.py               # Centralised exception handlers (AppError → JSON w/ request_id)
+│   │   └── v1/
+│   │       ├── __init__.py         # /api router aggregator (API-key + rate-limit deps)
+│   │       ├── deps.py             # Lazy service singletons, capacity & circuit-breaker checks
+│   │       ├── chat.py             # POST /api/chat/stream, session CRUD
+│   │       ├── career.py           # POST /api/career/cover-letter, /interview-prep (+ streams)
+│   │       ├── resume.py           # POST /api/resume/tailor/stream, /export-pdf
+│   │       └── health.py           # GET /health liveness probe
 │   ├── core/
-│   │   ├── config.py               # Pydantic BaseSettings (all env vars, CORS, security)
+│   │   ├── config.py               # Pydantic BaseSettings (env vars, CORS, security, limits)
+│   │   ├── exceptions.py           # AppError hierarchy (ServiceUnavailable, PDFPageLimit, …)
+│   │   ├── security.py             # CORS parsing, client IP, optional API-key auth
+│   │   ├── events.py               # Lifespan (startup cache init / shutdown)
+│   │   ├── logging.py              # Structured logging bootstrap
+│   │   ├── infrastructure.py       # ServiceConfig, CircuitBreaker, ConcurrencyManager
+│   │   ├── rate_limit.py           # Redis rate limiter w/ in-memory sliding-window fallback
 │   │   ├── llm.py                  # Chat model builder (OpenAI or AWS Bedrock providers)
 │   │   └── caching.py              # Redis SemanticCacheService with HuggingFace embeddings
 │   ├── db/
-│   │   ├── database.py             # SQLAlchemy async engine + session
+│   │   ├── database.py             # SQLAlchemy engine + session
 │   │   └── models.py               # MasterResume, JobApplication, Generation
 │   ├── schemas/
 │   │   └── resume_schemas.py       # Pydantic models (JDValidation, SkillsComparison, state, export)
 │   ├── services/
+│   │   ├── chat_service.py         # Chat business logic (greeting detect, resume extraction, prompts)
 │   │   ├── chat_session.py         # JSON file-based chat session store (CRUD, summarization)
 │   │   ├── pdf_service.py          # PDF text extraction via pdfplumber
 │   │   ├── pdf_export.py           # Resume PDF generation via reportlab
+│   │   ├── validation_service.py   # JD validation + request input validation
+│   │   ├── file_handling_service.py# Uploaded file persistence & integrity checks
+│   │   ├── streaming_service.py    # SSE streaming w/ caching & circuit-breaker tracking
+│   │   ├── resume_tailor_service.py# Resume tailor orchestration
 │   │   └── career_assistant_service.py  # Career service orchestrator
-│   ├── prompts/
-│   │   └── resume_tailoring_prompts.py  # All LLM prompts (skill comparison, rewrite, polish)
-│   └── utils.py                    # SSE helpers, constants (file size, JD length limits)
+│   ├── prompts/                    # All LLM prompts (skill comparison, rewrite, polish, agent)
+│   └── utils/                      # constants, helpers, SSE formatting, telemetry
 ├── alembic/                        # Database migrations (SQLAlchemy + Alembic)
 │   └── versions/                   # Migration revision scripts
 ├── chat_sessions/                  # JSON file store for chat sessions (auto-created)
+├── gunicorn_conf.py                # Optional env-driven gunicorn config (Docker uses explicit flags)
 ├── alembic.ini                     # Alembic configuration
 ├── pyproject.toml                  # Project metadata & dependencies
-├── main.py                         # Entry point (simple CLI placeholder)
-└── test_graph.py                   # Quick test script for ResumeTailorAgent
+└── Dockerfile                      # Multi-stage, non-root, gunicorn + uvicorn workers
 ```
+
+## Production Server
+
+The container runs **gunicorn with async uvicorn workers**:
+
+```bash
+gunicorn app.main:app --workers 4 --worker-class uvicorn.workers.UvicornWorker --bind 0.0.0.0:8000 --timeout 300
+```
+
+- Worker count, timeouts, and process recycling are configurable via env vars (see `gunicorn_conf.py` and `.env.example`).
+- A `docker-compose.yml` with Redis + healthchecks is included for local/prod compose runs.
 
 ## Features
 

@@ -5,6 +5,7 @@ Tools gather/transform data and may use LLM calls for analysis tasks.
 
 import json
 import logging
+import os
 import re
 from pydantic import BaseModel, Field
 
@@ -53,6 +54,28 @@ class CompareSkillsInput(BaseModel):
 # compare_skills is an exception — it uses an LLM for deep semantic analysis.
 
 
+def _resolve_storage_path(pdf_path: str) -> str:
+    """Resolve a PDF path that may be relative (e.g. ``storage/resume_x.pdf``).
+
+    Files are saved under ``app/storage/`` at upload time, but the LLM often
+    passes the relative ``storage/...`` string from the message marker. If the
+    path is not absolute and doesn't exist as-is, fall back to the app
+    package directory so the file is always found regardless of the server's
+    working directory (important under gunicorn workers).
+    """
+    if os.path.isabs(pdf_path) or os.path.exists(pdf_path):
+        return pdf_path
+
+    # tools.py lives at app/agents/tools.py → package root is two levels up
+    app_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    candidate = os.path.join(app_root, pdf_path)
+    if os.path.exists(candidate):
+        logger.info("Resolved PDF path %s → %s", pdf_path, candidate)
+        return candidate
+
+    return pdf_path
+
+
 def extract_resume_text(pdf_path: str) -> str:
     """Extract raw text content from a PDF resume file. 
     CRITICAL: Only call this tool when you can see a `[File saved to: ...]` or `[Resume file uploaded: ...]` marker in the conversation. 
@@ -61,9 +84,17 @@ def extract_resume_text(pdf_path: str) -> str:
     you do NOT need to call this tool.
     """
 
-    logger.info("📄 Extracting resume text from %s (cache miss)", pdf_path)
+    # Serve from the prewarm cache first — the route extracts the text at
+    # upload time, so any invocation (any worker, any path) returns instantly.
+    cached = _tool_cache.get("prewarm:extract_resume_text")
+    if cached:
+        logger.info("⚡ extract_resume_text served from prewarm cache (%d chars)", len(cached))
+        return cached
+
+    resolved_path = _resolve_storage_path(pdf_path)
+    logger.info("📄 Extracting resume text from %s (cache miss)", resolved_path)
     try:
-        text = PDFParsingService.extract_text_from_pdf(pdf_path)
+        text = PDFParsingService.extract_text_from_pdf(resolved_path)
         if not text or len(text.strip()) < 50:
             return "Error: Could not extract sufficient text from PDF."
         return text

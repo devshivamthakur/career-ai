@@ -9,6 +9,10 @@ streaming configuration, and resume detection heuristics.
 MAX_FILE_SIZE_MB = 10
 MIN_JOB_DESCRIPTION_LENGTH = 50
 MAX_JOB_DESCRIPTION_LENGTH = 5000
+MAX_COMPANY_LENGTH = 100
+MAX_ROLE_LENGTH = 100
+MAX_CHAT_MESSAGE_LENGTH = 4000
+MAX_RESUME_TEXT_LENGTH = 100000
 
 # ── Streaming ───────────────────────────────────────────────────
 STREAM_DELAY = 0  # Artificial delay between SSE chunks (0 = disabled)

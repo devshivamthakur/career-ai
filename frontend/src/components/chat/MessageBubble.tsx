@@ -1,8 +1,10 @@
-import { memo, useState, useCallback } from 'react';
+import { memo, useState, useCallback, useMemo } from 'react';
 import { Download, FileText, Check, Paperclip } from 'lucide-react';
 import type { ChatMessage } from '../../types/api';
 import { StreamingText } from '../shared/StreamingText';
 import { ToolCallCard } from './ToolCallCard';
+import { ResumeCard } from './ResumeCard';
+import { splitResumeSegments } from '../../utils/resumeSegments';
 import { exportPdf } from '../../api/client';
 import { useToastStore } from '../../stores/toastStore';
 
@@ -31,6 +33,11 @@ export const MessageBubble = memo(function MessageBubble({ message, isStreaming 
   const [isDownloading, setIsDownloading] = useState(false);
   const showToast = useToastStore((s) => s.showToast);
   const isUser = message.role === 'user';
+
+  // Split content into conversational + resume segments so the resume
+  // block (between ---BEGIN RESUME--- / ---END RESUME---) renders as a
+  // styled document card with the markers hidden.
+  const segments = useMemo(() => splitResumeSegments(message.content), [message.content]);
 
   const handleDownloadResume = useCallback(async () => {
     if (!message.resumeContent) return;
@@ -89,10 +96,26 @@ export const MessageBubble = memo(function MessageBubble({ message, isStreaming 
             </>
           ) : (
             <div className="text-sm overflow-hidden [&_pre]:overflow-x-auto [&_pre]:whitespace-pre-wrap [&_pre]:break-words [&_code]:break-words [&_p]:break-words [&_h1]:break-words [&_h2]:break-words [&_h3]:break-words [&_li]:break-words">
-              <StreamingText
-                text={message.content}
-                isStreaming={isStreaming ?? false}
-              />
+              {segments.map((seg, idx) => {
+                const isLastSegment = idx === segments.length - 1;
+                const streaming = (isStreaming ?? false) && isLastSegment;
+                if (seg.type === 'resume') {
+                  return (
+                    <ResumeCard
+                      key={idx}
+                      content={seg.content}
+                      isStreaming={streaming}
+                    />
+                  );
+                }
+                return (
+                  <StreamingText
+                    key={idx}
+                    text={seg.content}
+                    isStreaming={streaming}
+                  />
+                );
+              })}
             </div>
           )}
         </div>

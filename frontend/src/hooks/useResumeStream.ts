@@ -19,7 +19,6 @@ export function useResumeStream() {
     setAtsData,
     appendToken,
     setComplete,
-    setStreaming,
     setError,
   } = useResumeStore();
 
@@ -118,7 +117,7 @@ export function useResumeStream() {
         showToast(error, 'error');
       },
     });
-  }, [file, jobDescription, start, setStage, setAtsData, appendToken, setComplete, setStreaming, setError, showToast]);
+  }, [file, jobDescription, start, setStage, setAtsData, appendToken, setComplete, setError, showToast]);
 
   return { startStream, stopStream: stop, isStreaming };
 }

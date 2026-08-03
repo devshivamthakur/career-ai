@@ -51,6 +51,7 @@ export default function ChatPage() {
 
   const {
     addMessage,
+    removeMessages,
     appendToken,
     addToolCall,
     updateToolCall,
@@ -80,9 +81,11 @@ export default function ChatPage() {
       if (!sessionId || sendingRef.current) return;
       sendingRef.current = true;
 
-      // Add user message
+      // Add user message — IDs are tracked so they can be removed if the
+      // document upload fails and the backend never processes the message.
+      const userMessageId = generateId();
       const userMsg: import('../types/api').ChatMessage = {
-        id: generateId(),
+        id: userMessageId,
         role: 'user' as const,
         content: message,
         timestamp: new Date().toISOString(),
@@ -91,9 +94,9 @@ export default function ChatPage() {
       addMessage(userMsg);
 
       // Add placeholder assistant message
-      const assistantId = generateId();
+      const assistantMessageId = generateId();
       const assistantMsg = {
-        id: assistantId,
+        id: assistantMessageId,
         role: 'assistant' as const,
         content: '',
         timestamp: new Date().toISOString(),
@@ -104,6 +107,14 @@ export default function ChatPage() {
       toolCallIdRef.current = null;
       toolCallNameRef.current = null;
 
+      // Whether this send carries a PDF. The backend validates it (size,
+      // page count, extractable text) before the stream starts — we only lock
+      // the chat to a single resume once the request is accepted (onOpen).
+      const hadFile = !!attachedFile;
+      // Set once the backend confirms the upload; guards onError so a
+      // mid-stream failure after a successful upload doesn't unlock re-upload.
+      let uploadAccepted = false;
+
       // Build form data
       const formData = new FormData();
       formData.append('message', message);
@@ -112,14 +123,22 @@ export default function ChatPage() {
       if (attachedFile) {
         formData.append('file', attachedFile);
         setAttachedFile(null);
-        // Optimistically mark as uploaded; backend will reject duplicates
-        // with a clear error if this somehow isn't the first upload.
-        setResumeUploaded(true);
+        // NOTE: resumeUploaded is intentionally NOT set optimistically here.
+        // If the PDF fails validation (e.g. too many pages), we reset the flag
+        // in onError so the user can pick a different resume and retry.
       }
 
       start({
         url: STREAM_URL,
         body: formData,
+        onOpen: () => {
+          // Server accepted the request — the PDF passed validation and was
+          // stored. Lock the chat to a single resume.
+          if (hadFile) {
+            uploadAccepted = true;
+            setResumeUploaded(true);
+          }
+        },
         onEvent: (type, data) => {
           const d = data as Record<string, unknown>;
           switch (type) {
@@ -226,11 +245,27 @@ export default function ChatPage() {
         },
         onError: (error) => {
           sendingRef.current = false;
-          // If the error is about duplicate file upload, ensure flag is set
-          // (the backend rejected it because a resume was already uploaded).
-          if (error.toLowerCase().includes('already uploaded')) {
+
+          // Duplicate-file rejection: a resume is already on this session.
+          const isAlreadyUploaded = error.toLowerCase().includes('already uploaded');
+          // Any other file rejection (too many pages, unreadable PDF, size…)
+          // means the backend never accepted the upload.
+          const isUploadRejected = hadFile && !uploadAccepted;
+
+          if (isAlreadyUploaded) {
             setResumeUploaded(true);
+          } else if (isUploadRejected) {
+            // Release the lock so the user can pick a different resume.
+            setResumeUploaded(false);
           }
+
+          // A document upload error means the backend never processed the
+          // message — remove the optimistic user + assistant placeholders
+          // so the chat doesn't show a stuck exchange.
+          if (isAlreadyUploaded || isUploadRejected) {
+            removeMessages([userMessageId, assistantMessageId]);
+          }
+
           showToast(error, 'error');
           setStreaming(false);
         },
@@ -241,10 +276,12 @@ export default function ChatPage() {
       attachedFile,
       setAttachedFile,
       addMessage,
+      removeMessages,
       appendToken,
       addToolCall,
       updateToolCall,
       setResumeContent,
+      setResumeUploaded,
       setStreaming,
       start,
       showToast,

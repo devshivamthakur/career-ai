@@ -1,5 +1,7 @@
 import { useState, useRef, useCallback, type KeyboardEvent, type ChangeEvent } from 'react';
 import { Send, Square, Paperclip, X } from 'lucide-react';
+import { useToastStore } from '../../stores/toastStore';
+import { LIMITS, MAX_FILE_SIZE_BYTES } from '../../utils/limits';
 
 interface InputBarProps {
   onSend: (message: string) => void;
@@ -23,6 +25,7 @@ export function InputBar({
   const [input, setInput] = useState('');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const showToast = useToastStore((s) => s.showToast);
 
   const adjustHeight = useCallback(() => {
     const ta = textareaRef.current;
@@ -53,21 +56,30 @@ export function InputBar({
   );
 
   const handleInputChange = useCallback((e: ChangeEvent<HTMLTextAreaElement>) => {
-    setInput(e.target.value);
+    // Enforce the backend message limit client-side
+    setInput(e.target.value.slice(0, LIMITS.MAX_CHAT_MESSAGE_LENGTH));
     adjustHeight();
   }, [adjustHeight]);
 
   const handleFileSelect = useCallback(
     (e: ChangeEvent<HTMLInputElement>) => {
       const file = e.target.files?.[0] ?? null;
-      if (file && file.type === 'application/pdf') {
-        onAttachFile(file);
+      if (file) {
+        if (file.type !== 'application/pdf') {
+          showToast('Only PDF files are accepted', 'error');
+        } else if (file.size > MAX_FILE_SIZE_BYTES) {
+          showToast(`File exceeds ${LIMITS.MAX_FILE_SIZE_MB}MB limit`, 'error');
+        } else {
+          onAttachFile(file);
+        }
       }
       // Reset input so same file can be re-selected
       e.target.value = '';
     },
-    [onAttachFile],
+    [onAttachFile, showToast],
   );
+
+  const charsRemaining = LIMITS.MAX_CHAT_MESSAGE_LENGTH - input.length;
 
   return (
     <div className="border-t border-border bg-bg-surface px-4 py-3">
@@ -113,6 +125,7 @@ export function InputBar({
             onKeyDown={handleKeyDown}
             placeholder="Type your message..."
             rows={1}
+            maxLength={LIMITS.MAX_CHAT_MESSAGE_LENGTH}
             disabled={disabled}
             className="w-full resize-none bg-bg-base border border-border rounded-lg px-3 py-2 text-sm text-text-primary placeholder-text-secondary outline-none focus:border-accent/50 transition-colors disabled:opacity-50"
             style={{ maxHeight: '120px' }}
@@ -141,6 +154,18 @@ export function InputBar({
         )}
         </div>
       </div>
+      {/* Character counter — subtle, only when near the limit */}
+      {input.length > 0 && (
+        <div className="flex justify-end mt-1 pr-1">
+          <span
+            className={`text-[10px] font-mono ${
+              charsRemaining < 100 ? 'text-warning' : 'text-text-secondary'
+            }`}
+          >
+            {input.length} / {LIMITS.MAX_CHAT_MESSAGE_LENGTH}
+          </span>
+        </div>
+      )}
     </div>
   );
 }
