@@ -226,6 +226,10 @@ services:
       - HUGGINGFACE_API_TOKEN=\${HUGGINGFACE_API_TOKEN}
       - FAST_MODEL_NAME=\${FAST_MODEL_NAME}
       - QUALITY_MODEL_NAME=\${QUALITY_MODEL_NAME}
+      - ALLOWED_HOSTS=\${ALLOWED_HOSTS}
+      - LANGFUSE_BASE_URL=\${LANGFUSE_BASE_URL}
+      - PROJECT_NAME=\${PROJECT_NAME}
+      - VERSION=\${VERSION}
     depends_on:
       redis:
         condition: service_healthy
