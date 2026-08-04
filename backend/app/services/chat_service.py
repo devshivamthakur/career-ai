@@ -94,6 +94,39 @@ HTML_MARKER_PATTERN = re.compile(
     re.DOTALL,
 )
 
+HTML_BEGIN_MARKER_RE = re.compile(r"^<!--\s*RESUME\s*-->$", re.IGNORECASE)
+HTML_END_MARKER_RE = re.compile(r"^<!--\s*/\s*RESUME\s*-->$", re.IGNORECASE)
+
+
+def _marker_keyword(line: str) -> str:
+    """Collapse a marker line to its alphanumeric uppercase core.
+
+    ``---BEGIN RESUME---``, ``**BEGIN RESUME**`` and ``### BEGIN RESUME ###``
+    all collapse to ``BEGINRESUME``.
+    """
+    return re.sub(r"[^A-Z0-9]", "", line.strip().upper())
+
+
+def normalize_resume_markers(text: str) -> str:
+    """Rewrite any style of BEGIN/END RESUME marker line to the canonical
+    ``---BEGIN RESUME---`` / ``---END RESUME---`` form.
+
+    LLMs occasionally decorate the markers (bold ``**BEGIN RESUME**``, heading
+    hashes, ``<!-- RESUME -->``, etc.). Canonicalizing first lets the existing
+    extraction/stripping patterns work regardless of the decoration style.
+    """
+    lines = []
+    for line in text.split("\n"):
+        stripped = line.strip()
+        keyword = _marker_keyword(stripped)
+        if keyword == "BEGINRESUME" or HTML_BEGIN_MARKER_RE.match(stripped):
+            lines.append("---BEGIN RESUME---")
+        elif keyword == "ENDRESUME" or HTML_END_MARKER_RE.match(stripped):
+            lines.append("---END RESUME---")
+        else:
+            lines.append(line)
+    return "\n".join(lines)
+
 
 def _contains_resume_sections(text: str) -> Optional[list[str]]:
     """Return matched resume section headings if 3+ are found, else None."""
@@ -171,6 +204,7 @@ def extract_resume_from_content(
     Uses visible markers, then HTML markers, then structural heuristics.
     Returns ``None`` when no resume content is detected.
     """
+    content = normalize_resume_markers(content)
     match = VISIBLE_MARKER_PATTERN.search(content)
     if match:
         extracted = match.group(1).strip()
@@ -203,6 +237,7 @@ def extract_resume_from_content(
 
 def strip_resume_markers(content: str) -> str:
     """Remove all marker types from content for clean storage/display."""
+    content = normalize_resume_markers(content)
     cleaned = VISIBLE_MARKER_PATTERN.sub("", content)
     cleaned = HTML_MARKER_PATTERN.sub("", cleaned)
     return cleaned.strip()

@@ -244,6 +244,7 @@ When you generate a **complete, tailored resume**, wrap it in visible markers:
 
 **Rules:**
 - Markers must be on their OWN lines (blank line before and after)
+- Markers must be EXACTLY `---BEGIN RESUME---` and `---END RESUME---` — do NOT bold them (`**BEGIN RESUME**`), do NOT add heading hashes, and do NOT wrap them in HTML comments
 - Resume inside is COMPLETE and STANDALONE (not a fragment)
 - Resume is ATS-optimized (no fancy formatting, clean structure)
 - NO analysis labels inside (no raw JSON, no "matched_skills" comments)

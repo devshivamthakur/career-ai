@@ -1,3 +1,5 @@
+import { isEndResumeMarker } from './resumeSegments';
+
 /**
  * Strips trailing conversational / suggestion text that the LLM sometimes
  * appends after the resume content (e.g. "This tailored version emphasizes…",
@@ -52,7 +54,7 @@ export function stripTrailingCommentary(text: string): string {
     }
 
     // After ---END RESUME---, check if remaining content is empty or just commentary
-    if (/^---END\s*RESUME---$/i.test(trimmed) && i < lines.length - 1) {
+    if (isEndResumeMarker(lines[i]) && i < lines.length - 1) {
       const remaining = lines.slice(i + 1).filter((l) => l.trim().length > 0);
       if (remaining.length > 0) {
         const allCommentary = remaining.every(

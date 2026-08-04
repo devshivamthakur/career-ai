@@ -12,10 +12,31 @@ export type ContentSegment =
   | { type: 'text'; content: string }
   | { type: 'resume'; content: string };
 
-const BEGIN_RESUME_RE = /^---\s*BEGIN\s*RESUME\s*---\s*$/i;
-const END_RESUME_RE = /^---\s*END\s*RESUME\s*---\s*$/i;
 const HTML_BEGIN_RE = /^<!--\s*RESUME\s*-->$/i;
 const HTML_END_RE = /^<!--\s*\/\s*RESUME\s*-->$/i;
+
+/**
+ * Collapses a marker line to a bare keyword so decorated variants are all
+ * recognized: `---BEGIN RESUME---`, `**BEGIN RESUME**`, `### BEGIN RESUME ###`,
+ * `BEGIN RESUME:` …
+ */
+function markerKeyword(line: string): string {
+  return line.trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+}
+
+export function isBeginResumeMarker(line: string): boolean {
+  const trimmed = line.trim();
+  if (!trimmed) return false;
+  if (HTML_BEGIN_RE.test(trimmed)) return true;
+  return markerKeyword(trimmed) === 'BEGINRESUME';
+}
+
+export function isEndResumeMarker(line: string): boolean {
+  const trimmed = line.trim();
+  if (!trimmed) return false;
+  if (HTML_END_RE.test(trimmed)) return true;
+  return markerKeyword(trimmed) === 'ENDRESUME';
+}
 
 export function splitResumeSegments(text: string): ContentSegment[] {
   if (!text) return [];
@@ -33,11 +54,9 @@ export function splitResumeSegments(text: string): ContentSegment[] {
   };
 
   for (const line of lines) {
-    const trimmed = line.trim();
-
     if (resumeBuffer !== null) {
       // Inside a resume block — stop at the closing marker
-      if (END_RESUME_RE.test(trimmed) || HTML_END_RE.test(trimmed)) {
+      if (isEndResumeMarker(line)) {
         const content = resumeBuffer.join('\n').trim();
         if (content) segments.push({ type: 'resume', content });
         resumeBuffer = null;
@@ -48,7 +67,7 @@ export function splitResumeSegments(text: string): ContentSegment[] {
     }
 
     // Opening marker — everything after this belongs to the resume
-    if (BEGIN_RESUME_RE.test(trimmed) || HTML_BEGIN_RE.test(trimmed)) {
+    if (isBeginResumeMarker(line)) {
       flushText();
       resumeBuffer = [];
       continue;

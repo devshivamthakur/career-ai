@@ -6,6 +6,7 @@ import { useSseStream } from '../hooks/useSseStream';
 import { ChatWindow } from '../components/chat/ChatWindow';
 import { InputBar } from '../components/chat/InputBar';
 import { stripTrailingCommentary } from '../utils/cleanup';
+import { splitResumeSegments, type ContentSegment } from '../utils/resumeSegments';
 
 
 const API_ORIGIN = import.meta.env.VITE_API_URL ?? '';
@@ -17,23 +18,16 @@ const STREAM_URL = API_ORIGIN
 // If the backend misses detecting resume markers, the frontend
 // tries to extract them directly from the message content.
 
-const VISIBLE_RESUME_RE = /---\s*BEGIN\s*RESUME\s*---\s*([\s\S]*?)\s*---\s*END\s*RESUME\s*---/i;
-const HTML_RESUME_RE = /<!--RESUME-->([\s\S]*?)<!--\/RESUME-->/;
-
 function extractResumeFromText(text: string): string | null {
-  // Try visible markers first
-  const visibleMatch = VISIBLE_RESUME_RE.exec(text);
-  if (visibleMatch) {
-    const extracted = visibleMatch[1].trim();
-    if (extracted.length >= 200) return extracted;
-  }
-  // Try HTML markers
-  const htmlMatch = HTML_RESUME_RE.exec(text);
-  if (htmlMatch) {
-    const extracted = htmlMatch[1].trim();
-    if (extracted.length >= 200) return extracted;
-  }
-  return null;
+  // Reuse the same tolerant segment parser used for rendering so any
+  // marker style (---BEGIN RESUME---, **BEGIN RESUME**, ### BEGIN RESUME ###,
+  // <!-- RESUME -->) is detected consistently with the UI.
+  const segments = splitResumeSegments(text);
+  const resume = segments
+    .filter((s): s is Extract<ContentSegment, { type: 'resume' }> => s.type === 'resume')
+    .map((s) => s.content)
+    .join('\n\n');
+  return resume.length >= 200 ? resume : null;
 }
 
 // ── stripTrailingCommentary is imported from ../utils/cleanup ───
