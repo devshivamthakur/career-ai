@@ -91,10 +91,12 @@ class Settings(BaseSettings):
 
     @property
     def allowed_hosts_list(self) -> list[str]:
-        """Parse ALLOWED_HOSTS into a list. "*" means allow all hosts."""
-        if self.ALLOWED_HOSTS.strip() == "*":
+        """Parse ALLOWED_HOSTS into a list, stripping whitespace and quotes. "*" means allow all."""
+        raw = self.ALLOWED_HOSTS.strip()
+        if raw == "*" or raw == '"*"':
             return ["*"]
-        return [h.strip() for h in self.ALLOWED_HOSTS.split(",") if h.strip()]
+        # Split by comma and strip whitespace + quotes from each entry
+        return [h.strip().strip("'").strip('"') for h in raw.split(",") if h.strip()]
 
     # Maximum accepted request body size (MB) — guards against abuse
     MAX_BODY_SIZE_MB: int = 15
@@ -104,8 +106,8 @@ class Settings(BaseSettings):
     
     # CORS detailed configuration
     ALLOW_CREDENTIALS: bool = True
-    ALLOW_METHODS: list[str] = ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
-    ALLOW_HEADERS: list[str] = ["Content-Type", "Authorization", "X-Request-ID", "X-API-Key"]
+    ALLOW_METHODS: list[str] = ["*"]
+    ALLOW_HEADERS: list[str] = ["*"]
     
     # Load configuration from the .env file
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")

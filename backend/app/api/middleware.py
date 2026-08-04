@@ -15,7 +15,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import Response
 
 from app.core.config import settings
-from app.core.security import get_client_ip
+from app.core.security import get_client_ip, parse_allowed_origins
 from app.utils.helpers import generate_request_id
 
 logger = logging.getLogger(__name__)
@@ -108,13 +108,15 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 
         # Content-Security-Policy — relaxed in dev (Swagger/JSdelivr), strict in prod
         if settings.ENVIRONMENT == "production":
+            # In production, connect-src should allow self and the configured origins
+            origins_str = " ".join(parse_allowed_origins())
             csp = (
                 "default-src 'self'; "
                 "script-src 'self'; "
                 "style-src 'self' 'unsafe-inline'; "
                 "img-src 'self' data:; "
                 "font-src 'self' data:; "
-                "connect-src 'self'; "
+                f"connect-src 'self' {origins_str}; "
                 "frame-ancestors 'none'; "
             )
         else:

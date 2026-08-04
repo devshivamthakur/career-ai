@@ -32,6 +32,10 @@ REGISTRY_TYPE="${REGISTRY_TYPE:-dockerhub}"
 DOCKER_USERNAME="${DOCKER_USERNAME:?Missing DOCKER_USERNAME}"
 DOCKER_REGISTRY="${DOCKER_USERNAME}"
 
+# ---- Docker Compose Command Detection ----
+# Some systems use 'docker compose' (plugin), others use 'docker-compose' (standalone)
+DOCKER_COMPOSE_CMD="docker compose" # default
+
 AWS_ACCOUNT_ID="${AWS_ACCOUNT_ID:-}"
 AWS_REGION="${AWS_REGION:-us-east-1}"
 
@@ -235,7 +239,7 @@ services:
         condition: service_healthy
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:8000/v1/health"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -283,20 +287,30 @@ COMPOSE
     # -------------------------------------------------------------------------
     registry_login_ec2 || true
 
-    info "Pulling image on EC2..."
-    ec2_ssh "docker pull ${FULL_IMAGE}:${LATEST_TAG}"
-    pass "Image pulled on EC2."
-
-    # -------------------------------------------------------------------------
-    #  5. Restart the stack
-    # -------------------------------------------------------------------------
-    info "Restarting containers..."
+    info "Detecting Docker Compose and pulling images on EC2..."
     ec2_ssh "
         cd ${EC2_APP_DIR} && \
-        docker-compose -f ${EC2_COMPOSE_FILE} down --remove-orphans && \
-        docker-compose -f ${EC2_COMPOSE_FILE} up -d
+        if ! docker compose version &>/dev/null; then
+            DOCKER_COMPOSE='docker-compose'
+        else
+            DOCKER_COMPOSE='docker compose'
+        fi && \
+        echo \"DOCKER_COMPOSE=\$DOCKER_COMPOSE\" > .compose_env && \
+        \$DOCKER_COMPOSE -f ${EC2_COMPOSE_FILE} pull
     "
-    pass "Containers restarted."
+    pass "Images pulled on EC2."
+
+    # -------------------------------------------------------------------------
+    #  5. Restart the stack (Zero-Downtime approach)
+    # -------------------------------------------------------------------------
+    info "Restarting containers (zero-downtime rolling restart)..."
+    ec2_ssh "
+        cd ${EC2_APP_DIR} && \
+        source .compose_env && \
+        # We don't use 'down' to avoid downtime. 'up -d' will recreate containers if needed.
+        \$DOCKER_COMPOSE -f ${EC2_COMPOSE_FILE} up -d --remove-orphans
+    "
+    pass "Containers updated/restarted."
 
     # -------------------------------------------------------------------------
     #  6. Clean up old images on EC2
@@ -385,11 +399,100 @@ cmd_setup_ec2() {
     info "It proxies your domain → 127.0.0.1:8000 (your Docker container)."
 }
 
+# =============================================================================
+#  COMMAND: setup-nginx  — install and configure nginx with SSL
+# =============================================================================
+cmd_setup_nginx() {
+    local cert_path="/Users/shivam/Downloads/certificate.pem"
+    local key_path="/Users/shivam/Downloads/private.key"
+    local domain="career-ai.work.gd"
+
+    info "=== Setting up Nginx with SSL (Port 443) ==="
+
+    # 1. Install Nginx if not present
+    info "Installing Nginx on EC2..."
+    ec2_ssh "sudo yum update -y && sudo yum install -y nginx"
+
+    # 2. Create SSL directory
+    info "Creating SSL directory..."
+    ec2_ssh "sudo mkdir -p /etc/nginx/ssl"
+
+    # 3. Upload Certificate and Key
+    info "Uploading SSL certificate and key..."
+    if [ ! -f "$cert_path" ]; then fail "Local cert not found: $cert_path"; fi
+    if [ ! -f "$key_path" ]; then fail "Local key not found: $key_path"; fi
+
+    ec2_scp "$cert_path" "/tmp/certificate.pem"
+    ec2_scp "$key_path" "/tmp/private.key"
+
+    ec2_ssh "
+        sudo mv /tmp/certificate.pem /etc/nginx/ssl/certificate.pem
+        sudo mv /tmp/private.key /etc/nginx/ssl/private.key
+        sudo chmod 600 /etc/nginx/ssl/private.key
+        sudo chmod 644 /etc/nginx/ssl/certificate.pem
+        sudo chown root:root /etc/nginx/ssl/*
+    "
+
+    # 4. Generate Nginx Configuration
+    info "Generating Nginx configuration..."
+    # We use a heredoc to create the config file. Note: we escape $ variables for Nginx.
+    read -r -d '' NGINX_CONF << EOF || true
+server {
+    listen 80;
+    server_name $domain;
+    return 301 https://\$host\$request_uri;
+}
+
+server {
+    listen 443 ssl;
+    server_name $domain;
+
+    ssl_certificate /etc/nginx/ssl/certificate.pem;
+    ssl_certificate_key /etc/nginx/ssl/private.key;
+
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_ciphers HIGH:!aNULL:!MD5;
+
+    location / {
+        proxy_pass http://127.0.0.1:8000;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+
+        # WebSocket & Streaming support
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Connection \"upgrade\";
+        proxy_buffering off;
+        proxy_read_timeout 300;
+    }
+}
+EOF
+
+    echo "$NGINX_CONF" | ec2_ssh "cat > /tmp/careerai.conf"
+    ec2_ssh "sudo mv /tmp/careerai.conf /etc/nginx/conf.d/careerai.conf"
+
+    # 5. Start and Enable Nginx
+    info "Starting and enabling Nginx..."
+    ec2_ssh "
+        sudo systemctl enable nginx
+        sudo systemctl restart nginx
+    "
+
+    if ec2_ssh "sudo nginx -t" 2>/dev/null; then
+        pass "Nginx configured and restarted successfully."
+    else
+        fail "Nginx configuration test failed. Check logs on EC2."
+    fi
+}
+
 run_migrations_remote() {
     info "Running Alembic migrations on EC2..."
     ec2_ssh "
         cd ${EC2_APP_DIR} && \
-        docker-compose -f ${EC2_COMPOSE_FILE} exec -T api uv run alembic upgrade head
+        source .compose_env && \
+        \$DOCKER_COMPOSE -f ${EC2_COMPOSE_FILE} exec -T api uv run alembic upgrade head
     " && pass "Migrations applied successfully." || warn "Migration command failed (check DB connection)."
 }
 
@@ -433,7 +536,14 @@ cmd_status() {
     info "=== Status for ${EC2_HOST} ==="
     echo ""
     echo "--- Containers ---"
-    ec2_ssh "docker ps --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}'" || echo "(ssh failed)"
+    ec2_ssh "
+        if ! docker compose version &>/dev/null; then
+            DOCKER_COMPOSE='docker-compose'
+        else
+            DOCKER_COMPOSE='docker compose'
+        fi
+        \$DOCKER_COMPOSE -f ${EC2_APP_DIR}/${EC2_COMPOSE_FILE} ps
+    " || echo "(ssh or docker-compose failed)"
     echo ""
     echo "--- Disk Usage ---"
     ec2_ssh "df -h / | tail -1" || true
@@ -448,7 +558,15 @@ cmd_status() {
 cmd_logs() {
     check_prerequisites logs
     info "Tailing logs for careerai-api on ${EC2_HOST}..."
-    ec2_ssh "cd ${EC2_APP_DIR} && docker-compose -f ${EC2_COMPOSE_FILE} logs -f api"
+    ec2_ssh "
+        cd ${EC2_APP_DIR} && \
+        if ! docker compose version &>/dev/null; then
+            DOCKER_COMPOSE='docker-compose'
+        else
+            DOCKER_COMPOSE='docker compose'
+        fi
+        \$DOCKER_COMPOSE -f ${EC2_COMPOSE_FILE} logs -f api
+    "
 }
 
 # =============================================================================
@@ -480,11 +598,15 @@ cmd_rollback() {
     info "Rolling back to: ${FULL_IMAGE}:${PREV_TAG}"
 
     ec2_ssh "
+        if ! docker compose version &>/dev/null; then
+            DOCKER_COMPOSE='docker-compose'
+        else
+            DOCKER_COMPOSE='docker compose'
+        fi && \
         docker pull ${FULL_IMAGE}:${PREV_TAG} && \
         docker tag ${FULL_IMAGE}:${PREV_TAG} ${FULL_IMAGE}:${LATEST_TAG} && \
         cd ${EC2_APP_DIR} && \
-        docker-compose -f ${EC2_COMPOSE_FILE} down --remove-orphans && \
-        docker-compose -f ${EC2_COMPOSE_FILE} up -d
+        \$DOCKER_COMPOSE -f ${EC2_COMPOSE_FILE} up -d --remove-orphans
     "
 
     health_check
@@ -527,6 +649,10 @@ main() {
             check_prerequisites setup-ec2
             cmd_setup_ec2
             ;;
+        setup-nginx)
+            check_prerequisites setup-ec2
+            cmd_setup_nginx
+            ;;
         migrate)
             cmd_migrate
             ;;
@@ -549,6 +675,7 @@ Commands:
   push               Push image to registry only
   deploy             Build + push + deploy to EC2
   setup-ec2          ONE-TIME: migrate from git-clone to Docker-based deploy
+  setup-nginx        Install Nginx and configure SSL (Port 443)
   migrate            Run Alembic migrations on EC2
   status             Show deployment status on EC2
   logs               Tail API container logs on EC2
@@ -556,6 +683,7 @@ Commands:
 
 Examples:
   ./deploy.sh setup-ec2      # One-time: migrate EC2 from git-clone to Docker
+  ./deploy.sh setup-nginx    # Configure Nginx SSL
   ./deploy.sh build          # Build image
   ./deploy.sh deploy         # Full deploy
   ./deploy.sh logs           # Follow logs

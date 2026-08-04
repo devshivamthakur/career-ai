@@ -40,11 +40,11 @@ def get_client_ip(request: Request) -> str:
 def parse_allowed_origins() -> list[str]:
     """Parse the configured ``ALLOWED_ORIGINS`` into a list of origins.
 
-    Empty entries are dropped. A warning is logged if production is
-    running with no allowed origins.
+    Drops empty entries and strips whitespace/quotes.
     """
     raw = settings.ALLOWED_ORIGINS or ""
-    origins = [origin.strip() for origin in raw.split(",") if origin.strip()]
+    # Split by comma and strip whitespace + quotes
+    origins = [origin.strip().strip("'").strip('"') for origin in raw.split(",") if origin.strip()]
 
     if settings.ENVIRONMENT == "production" and not origins:
         logger.warning("No allowed origins configured for production CORS")
