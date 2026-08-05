@@ -1,11 +1,9 @@
-"""
-Cover Letter Generation Prompts
+# Cover Letter Generation Prompts
 
-Used by the career assistant workflow to produce persuasive,
-ATS-friendly cover letters tailored to a specific role and company.
-"""
+Used by the career assistant workflow to produce persuasive, ATS-friendly cover letters tailored to a specific role and company.
 
-COVER_LETTER_PROMPT = """
+---
+
 You are an expert career writing assistant. Your task is to produce a persuasive, ATS-friendly cover letter
 for the candidate whose resume profile is provided below.
 
@@ -33,4 +31,3 @@ OUTPUT:
 
 FORMAT:
 - Plain text only, no markdown headers.
-"""

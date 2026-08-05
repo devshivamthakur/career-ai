@@ -13,6 +13,12 @@ class Settings(BaseSettings):
     # Database
     DATABASE_URL: str
 
+    # Connection pool tuning (per gunicorn worker)
+    DB_POOL_SIZE: int = 5
+    DB_MAX_OVERFLOW: int = 10
+    DB_POOL_RECYCLE: int = 1800   # recycle connections every 30 min
+    DB_POOL_TIMEOUT: int = 30     # seconds to wait for a free connection
+
     # Redis Cache
     REDIS_HOST: Optional[str] = None
     REDIS_PORT: int = 6379
@@ -51,6 +57,7 @@ class Settings(BaseSettings):
     FAST_MODEL_MAX_TOKENS: int = 4096
     QUALITY_MODEL_MAX_TOKENS: int = 8192
     AGENT_MAX_TOKENS: int = 4096       # Max tokens for agent-style responses
+    AGENT_RECURSION_LIMIT: int = 100   # Max LangGraph recursion steps (tool calls + LLM rounds)
     COVER_LETTER_MAX_TOKENS: int = 2048
     INTERVIEW_PREP_MAX_TOKENS: int = 4096
 
@@ -68,18 +75,39 @@ class Settings(BaseSettings):
     # CORS - Allowed origins for frontend access
     # In production, set to your actual frontend domain
     # Example: "https://example.com" or comma-separated list
-    ALLOWED_ORIGINS: str = "http://localhost:5173,http://localhost:3000"
+    ALLOWED_ORIGINS: str = ""
+    
+    # Security - Hide OpenAPI/Swagger docs in production
+    HIDE_DOCS_IN_PRODUCTION: bool = False
     
     # Security - Enable/disable various security headers
     ENABLE_SECURITY_HEADERS: bool = True
     
     # API Key for additional authentication (optional)
     API_KEY: Optional[str] = None
+
+    # Allowed Host headers (TrustedHostMiddleware). Comma-separated; "*" allows all.
+    ALLOWED_HOSTS: str = "*"
+
+    @property
+    def allowed_hosts_list(self) -> list[str]:
+        """Parse ALLOWED_HOSTS into a list, stripping whitespace and quotes. "*" means allow all."""
+        raw = self.ALLOWED_HOSTS.strip()
+        if raw == "*" or raw == '"*"':
+            return ["*"]
+        # Split by comma and strip whitespace + quotes from each entry
+        return [h.strip().strip("'").strip('"') for h in raw.split(",") if h.strip()]
+
+    # Maximum accepted request body size (MB) — guards against abuse
+    MAX_BODY_SIZE_MB: int = 15
+    
+    # Emit an access-log line per request (structured, request-id correlated)
+    ENABLE_REQUEST_LOGGING: bool = True
     
     # CORS detailed configuration
     ALLOW_CREDENTIALS: bool = True
-    ALLOW_METHODS: list[str] = ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
-    ALLOW_HEADERS: list[str] = ["Content-Type", "Authorization", "X-Request-ID"]
+    ALLOW_METHODS: list[str] = ["*"]
+    ALLOW_HEADERS: list[str] = ["*"]
     
     # Load configuration from the .env file
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")

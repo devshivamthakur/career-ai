@@ -1,4 +1,4 @@
-import { useEffect, useCallback } from 'react';
+import { useEffect, useCallback, useRef } from 'react';
 import { useChatStore } from '../stores/chatStore';
 import { useToastStore } from '../stores/toastStore';
 import * as api from '../api/client';
@@ -15,6 +15,11 @@ export function useChatSession() {
   } = useChatStore();
 
   const showToast = useToastStore((s) => s.showToast);
+
+  // Guard against React StrictMode double-firing in development.
+  // useRef values persist across the StrictMode unmount/remount cycle,
+  // so this flag ensures initSession() runs only once.
+  const initStarted = useRef(false);
 
   const initSession = useCallback(async () => {
     try {
@@ -73,9 +78,10 @@ export function useChatSession() {
     clearMessages();
   }, [sessionId, setSessionId, clearMessages, showToast]);
 
-  // Initialize on mount
+  // Initialize on mount (runs once even with StrictMode double-mount)
   useEffect(() => {
-    if (!sessionId) {
+    if (!sessionId && !initStarted.current) {
+      initStarted.current = true;
       initSession();
     }
   }, [sessionId, initSession]);

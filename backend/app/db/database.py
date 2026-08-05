@@ -2,12 +2,19 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, declarative_base
 from app.core.config import settings
 
-# Initialize SQLAlchemy engine
-# Use pool_pre_ping to check connection validity before borrowing from the pool
+# Initialize SQLAlchemy engine with production pool settings.
+#   - pool_pre_ping: verify the connection before borrowing from the pool
+#     (survives DB restarts / dropped connections behind a proxy)
+#   - pool_size / max_overflow: bound total connections per worker
+#   - pool_recycle: recycle stale connections to avoid TIME_WAIT exhaustion
 engine = create_engine(
     settings.DATABASE_URL,
     pool_pre_ping=True,
-    # Additional production optimizations can go here
+    pool_size=settings.DB_POOL_SIZE,
+    max_overflow=settings.DB_MAX_OVERFLOW,
+    pool_recycle=settings.DB_POOL_RECYCLE,
+    pool_timeout=settings.DB_POOL_TIMEOUT,
+    echo=False,
 )
 
 # Create a configured "Session" class

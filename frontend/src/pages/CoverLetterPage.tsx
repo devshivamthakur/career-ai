@@ -1,9 +1,10 @@
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { generateCoverLetterUrl } from '../api/client';
 import { useSseStream } from '../hooks/useSseStream';
 import { useToastStore } from '../stores/toastStore';
 import { CoverLetterResult } from '../components/career/CoverLetterResult';
 import { PDFDropZone } from '../components/resume/PDFDropZone';
+import { LIMITS } from '../utils/limits';
 
 export default function CoverLetterPage() {
   const [company, setCompany] = useState('');
@@ -16,7 +17,12 @@ export default function CoverLetterPage() {
   const accumulatedRef = useRef('');
 
   const showToast = useToastStore((s) => s.showToast);
-  const { start, isStreaming } = useSseStream();
+  const { start, stop, isStreaming } = useSseStream();
+
+  // Abort any in-flight stream when navigating away
+  useEffect(() => {
+    return () => stop();
+  }, [stop]);
 
   const canGenerate =
     company.trim().length > 0 &&
@@ -73,8 +79,9 @@ export default function CoverLetterPage() {
             </label>
             <input
               value={company}
-              onChange={(e) => setCompany(e.target.value)}
+              onChange={(e) => setCompany(e.target.value.slice(0, LIMITS.MAX_COMPANY_LENGTH))}
               placeholder="e.g. Acme Corp"
+              maxLength={LIMITS.MAX_COMPANY_LENGTH}
               className="w-full bg-bg-base border border-border rounded-lg px-3 py-2.5 text-sm text-text-primary placeholder-text-secondary outline-none focus:border-accent/50 transition-colors"
             />
           </div>
@@ -86,8 +93,9 @@ export default function CoverLetterPage() {
             </label>
             <input
               value={role}
-              onChange={(e) => setRole(e.target.value)}
+              onChange={(e) => setRole(e.target.value.slice(0, LIMITS.MAX_ROLE_LENGTH))}
               placeholder="e.g. Senior Software Engineer"
+              maxLength={LIMITS.MAX_ROLE_LENGTH}
               className="w-full bg-bg-base border border-border rounded-lg px-3 py-2.5 text-sm text-text-primary placeholder-text-secondary outline-none focus:border-accent/50 transition-colors"
             />
           </div>

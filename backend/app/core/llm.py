@@ -38,5 +38,9 @@ def build_chat_model(
         max_tokens=max_tokens,
         streaming=streaming,
         callbacks=callbacks or [],
+        # Bound retries & request timeouts so slow/failed LLM calls fail fast
+        # instead of hanging workers indefinitely.
+        max_retries=2,
+        request_timeout=60,
     )
 

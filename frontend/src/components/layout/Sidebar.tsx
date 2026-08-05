@@ -8,6 +8,7 @@ import {
   ChevronLeft,
   ChevronRight,
   SquarePen,
+  Home,
 } from 'lucide-react';
 import { useUiStore } from '../../stores/uiStore';
 
@@ -47,6 +48,23 @@ export const Sidebar = memo(function Sidebar({ onNewChat }: SidebarProps) {
 
       {/* Navigation */}
       <nav className="flex-1 flex flex-col gap-1 p-3">
+        {/* Home / Landing */}
+        <NavLink
+          to="/"
+          className={({ isActive }) =>
+            `flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors text-sm ${
+              isActive
+                ? 'bg-accent/20 text-accent font-medium'
+                : 'text-text-secondary hover:text-text-primary hover:bg-bg-elevated'
+            }`
+          }
+        >
+          <Home size={20} className="shrink-0" />
+          {!sidebarCollapsed && <span>Home</span>}
+        </NavLink>
+
+        <div className="h-px bg-border my-2" />
+
         {navItems.map((item) => (
           <NavLink
             key={item.to}

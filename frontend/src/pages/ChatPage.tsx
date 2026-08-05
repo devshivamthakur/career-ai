@@ -1,10 +1,12 @@
-import { useCallback, useRef } from 'react';
+import { useCallback, useRef, useEffect } from 'react';
 import { useChatStore } from '../stores/chatStore';
 import { useToastStore } from '../stores/toastStore';
 import { useChatSession } from '../hooks/useChatSession';
 import { useSseStream } from '../hooks/useSseStream';
 import { ChatWindow } from '../components/chat/ChatWindow';
 import { InputBar } from '../components/chat/InputBar';
+import { stripTrailingCommentary } from '../utils/cleanup';
+import { splitResumeSegments, type ContentSegment } from '../utils/resumeSegments';
 
 
 const API_ORIGIN = import.meta.env.VITE_API_URL ?? '';
@@ -16,24 +18,19 @@ const STREAM_URL = API_ORIGIN
 // If the backend misses detecting resume markers, the frontend
 // tries to extract them directly from the message content.
 
-const VISIBLE_RESUME_RE = /---\s*BEGIN\s*RESUME\s*---\s*([\s\S]*?)\s*---\s*END\s*RESUME\s*---/i;
-const HTML_RESUME_RE = /<!--RESUME-->([\s\S]*?)<!--\/RESUME-->/;
-
 function extractResumeFromText(text: string): string | null {
-  // Try visible markers first
-  const visibleMatch = VISIBLE_RESUME_RE.exec(text);
-  if (visibleMatch) {
-    const extracted = visibleMatch[1].trim();
-    if (extracted.length >= 200) return extracted;
-  }
-  // Try HTML markers
-  const htmlMatch = HTML_RESUME_RE.exec(text);
-  if (htmlMatch) {
-    const extracted = htmlMatch[1].trim();
-    if (extracted.length >= 200) return extracted;
-  }
-  return null;
+  // Reuse the same tolerant segment parser used for rendering so any
+  // marker style (---BEGIN RESUME---, **BEGIN RESUME**, ### BEGIN RESUME ###,
+  // <!-- RESUME -->) is detected consistently with the UI.
+  const segments = splitResumeSegments(text);
+  const resume = segments
+    .filter((s): s is Extract<ContentSegment, { type: 'resume' }> => s.type === 'resume')
+    .map((s) => s.content)
+    .join('\n\n');
+  return resume.length >= 200 ? resume : null;
 }
+
+// ── stripTrailingCommentary is imported from ../utils/cleanup ───
 
 let messageCounter = 0;
 
@@ -48,37 +45,52 @@ export default function ChatPage() {
 
   const {
     addMessage,
+    removeMessages,
     appendToken,
     addToolCall,
     updateToolCall,
     setResumeContent,
     setStreaming,
+    setResumeUploaded,
     attachedFile,
     setAttachedFile,
+    resumeUploaded,
   } = useChatStore();
+
+  // Guard against concurrent sends (e.g., Enter + click in same tick)
+  const sendingRef = useRef(false);
 
   // Track tool call IDs for the current stream
   const toolCallIdRef = useRef<string | null>(null);
   const toolCallNameRef = useRef<string | null>(null);
   const toolStartTimeRef = useRef<number>(0);
 
+  // Abort any in-flight stream when navigating away
+  useEffect(() => {
+    return () => stop();
+  }, [stop]);
+
   const handleSend = useCallback(
     (message: string) => {
-      if (!sessionId) return;
+      if (!sessionId || sendingRef.current) return;
+      sendingRef.current = true;
 
-      // Add user message
-      const userMsg = {
-        id: generateId(),
+      // Add user message — IDs are tracked so they can be removed if the
+      // document upload fails and the backend never processes the message.
+      const userMessageId = generateId();
+      const userMsg: import('../types/api').ChatMessage = {
+        id: userMessageId,
         role: 'user' as const,
         content: message,
         timestamp: new Date().toISOString(),
+        file: attachedFile?.name,
       };
       addMessage(userMsg);
 
       // Add placeholder assistant message
-      const assistantId = generateId();
+      const assistantMessageId = generateId();
       const assistantMsg = {
-        id: assistantId,
+        id: assistantMessageId,
         role: 'assistant' as const,
         content: '',
         timestamp: new Date().toISOString(),
@@ -89,6 +101,14 @@ export default function ChatPage() {
       toolCallIdRef.current = null;
       toolCallNameRef.current = null;
 
+      // Whether this send carries a PDF. The backend validates it (size,
+      // page count, extractable text) before the stream starts — we only lock
+      // the chat to a single resume once the request is accepted (onOpen).
+      const hadFile = !!attachedFile;
+      // Set once the backend confirms the upload; guards onError so a
+      // mid-stream failure after a successful upload doesn't unlock re-upload.
+      let uploadAccepted = false;
+
       // Build form data
       const formData = new FormData();
       formData.append('message', message);
@@ -97,11 +117,22 @@ export default function ChatPage() {
       if (attachedFile) {
         formData.append('file', attachedFile);
         setAttachedFile(null);
+        // NOTE: resumeUploaded is intentionally NOT set optimistically here.
+        // If the PDF fails validation (e.g. too many pages), we reset the flag
+        // in onError so the user can pick a different resume and retry.
       }
 
       start({
         url: STREAM_URL,
         body: formData,
+        onOpen: () => {
+          // Server accepted the request — the PDF passed validation and was
+          // stored. Lock the chat to a single resume.
+          if (hadFile) {
+            uploadAccepted = true;
+            setResumeUploaded(true);
+          }
+        },
         onEvent: (type, data) => {
           const d = data as Record<string, unknown>;
           switch (type) {
@@ -157,6 +188,7 @@ export default function ChatPage() {
               const resumeData = d as { content?: string };
               if (resumeData.content) {
                 setResumeContent(resumeData.content);
+                setResumeUploaded(true);
               }
               break;
             }
@@ -176,17 +208,58 @@ export default function ChatPage() {
         onComplete: () => {
           // Client-side fallback: check if the last message has resume markers
           // (in case the backend `resume_ready` event wasn't emitted)
-          const { messages: currentMsgs } = useChatStore.getState();
+          const { messages: currentMsgs, resumeUploaded: alreadyUploaded } = useChatStore.getState();
           const lastMsg = currentMsgs[currentMsgs.length - 1];
-          if (lastMsg && lastMsg.role === 'assistant' && !lastMsg.resumeContent) {
-            const extracted = extractResumeFromText(lastMsg.content);
-            if (extracted) {
-              setResumeContent(extracted);
+          if (lastMsg && lastMsg.role === 'assistant') {
+            // Strip trailing conversational text from the message
+            const cleaned = stripTrailingCommentary(lastMsg.content);
+            if (cleaned !== lastMsg.content) {
+              // Update the message content in the store
+              useChatStore.setState((state) => {
+                const msgs = [...state.messages];
+                const idx = msgs.length - 1;
+                if (idx >= 0 && msgs[idx].id === lastMsg.id) {
+                  msgs[idx] = { ...msgs[idx], content: cleaned };
+                }
+                return { messages: msgs };
+              });
+            }
+            if (!lastMsg.resumeContent) {
+              const extracted = extractResumeFromText(cleaned);
+              if (extracted) {
+                setResumeContent(extracted);
+                if (!alreadyUploaded) {
+                  setResumeUploaded(true);
+                }
+              }
             }
           }
+          sendingRef.current = false;
           setStreaming(false);
         },
         onError: (error) => {
+          sendingRef.current = false;
+
+          // Duplicate-file rejection: a resume is already on this session.
+          const isAlreadyUploaded = error.toLowerCase().includes('already uploaded');
+          // Any other file rejection (too many pages, unreadable PDF, size…)
+          // means the backend never accepted the upload.
+          const isUploadRejected = hadFile && !uploadAccepted;
+
+          if (isAlreadyUploaded) {
+            setResumeUploaded(true);
+          } else if (isUploadRejected) {
+            // Release the lock so the user can pick a different resume.
+            setResumeUploaded(false);
+          }
+
+          // A document upload error means the backend never processed the
+          // message — remove the optimistic user + assistant placeholders
+          // so the chat doesn't show a stuck exchange.
+          if (isAlreadyUploaded || isUploadRejected) {
+            removeMessages([userMessageId, assistantMessageId]);
+          }
+
           showToast(error, 'error');
           setStreaming(false);
         },
@@ -197,10 +270,12 @@ export default function ChatPage() {
       attachedFile,
       setAttachedFile,
       addMessage,
+      removeMessages,
       appendToken,
       addToolCall,
       updateToolCall,
       setResumeContent,
+      setResumeUploaded,
       setStreaming,
       start,
       showToast,
@@ -208,6 +283,7 @@ export default function ChatPage() {
   );
 
   const handleStop = useCallback(() => {
+    sendingRef.current = false;
     stop();
     setStreaming(false);
   }, [stop, setStreaming]);
@@ -243,6 +319,7 @@ export default function ChatPage() {
         onAttachFile={setAttachedFile}
         isStreaming={isStreaming}
         attachedFile={attachedFile}
+        resumeUploaded={resumeUploaded}
       />
     </div>
   );

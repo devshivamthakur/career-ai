@@ -1,0 +1,28 @@
+# ─────────────────────────────────────────────────────────────────
+#  .dockerignore  —  Prevent secrets & build artifacts in images
+# ─────────────────────────────────────────────────────────────────
+
+# Environment files (NEVER bake secrets into images!)
+.env
+.env.production
+.env.*.local
+
+# Python
+__pycache__/
+.venv/
+venv/
+*.pyc
+*.pyo
+*.egg-info/
+
+# Git
+.git/
+.gitignore
+
+# IDE
+.idea/
+.vscode/
+
+# Logs & temp
+*.log
+.chat_sessions/

@@ -13,6 +13,14 @@ from app.services.chat_session import (
     delete_session,
     ensure_session,
 )
+from app.services.chat_service import (
+    build_user_prompt,
+    extract_resume_from_content,
+    is_casual_chat,
+    pick_greeting_response,
+    strip_resume_markers,
+    to_langchain_messages,
+)
 from app.services.pdf_service import PDFParsingService
 from app.services.pdf_export import PDFExportService
 from app.services.validation_service import ValidationService, RequestValidationService
@@ -28,6 +36,12 @@ __all__ = [
     "get_context_messages",
     "delete_session",
     "ensure_session",
+    "build_user_prompt",
+    "extract_resume_from_content",
+    "is_casual_chat",
+    "pick_greeting_response",
+    "strip_resume_markers",
+    "to_langchain_messages",
     "PDFParsingService",
     "PDFExportService",
     "ValidationService",

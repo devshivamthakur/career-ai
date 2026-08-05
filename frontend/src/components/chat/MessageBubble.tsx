@@ -1,10 +1,14 @@
-import { memo, useState, useCallback } from 'react';
-import { Download, FileText, Check } from 'lucide-react';
+import { memo, useState, useCallback, useMemo } from 'react';
+import { Download, FileText, Check, Paperclip } from 'lucide-react';
 import type { ChatMessage } from '../../types/api';
 import { StreamingText } from '../shared/StreamingText';
 import { ToolCallCard } from './ToolCallCard';
+import { ResumeCard } from './ResumeCard';
+import { splitResumeSegments } from '../../utils/resumeSegments';
 import { exportPdf } from '../../api/client';
 import { useToastStore } from '../../stores/toastStore';
+
+const API_ORIGIN = import.meta.env.VITE_API_URL ?? '';
 
 interface MessageBubbleProps {
   message: ChatMessage;
@@ -29,6 +33,11 @@ export const MessageBubble = memo(function MessageBubble({ message, isStreaming 
   const [isDownloading, setIsDownloading] = useState(false);
   const showToast = useToastStore((s) => s.showToast);
   const isUser = message.role === 'user';
+
+  // Split content into conversational + resume segments so the resume
+  // block (between ---BEGIN RESUME--- / ---END RESUME---) renders as a
+  // styled document card with the markers hidden.
+  const segments = useMemo(() => splitResumeSegments(message.content), [message.content]);
 
   const handleDownloadResume = useCallback(async () => {
     if (!message.resumeContent) return;
@@ -59,20 +68,54 @@ export const MessageBubble = memo(function MessageBubble({ message, isStreaming 
       <div className={`max-w-[80%] min-w-0 ${isUser ? 'order-1' : 'order-1'}`}>
         {/* Bubble */}
         <div
-          className={`rounded-lg px-4 py-3 overflow-hidden ${
+          className={`rounded-xl px-4 py-3 overflow-hidden ${
             isUser
-              ? 'bg-accent-soft text-text-primary rounded-br-md'
-              : 'bg-bg-surface border-l-2 border-accent text-text-primary rounded-bl-md'
+              ? 'bg-accent/15 text-text-primary rounded-br-md border border-accent/20'
+              : 'bg-bg-surface border border-border text-text-primary rounded-bl-md'
           }`}
         >
           {isUser ? (
-            <p className="text-sm whitespace-pre-wrap break-words">{message.content}</p>
+            <>
+              <p className="text-sm whitespace-pre-wrap break-words">{message.content}</p>
+
+              {/* Uploaded file card */}
+              {message.file && (
+                <a
+                  href={`${API_ORIGIN}/${message.file}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="group flex items-center gap-2 mt-2 px-3 py-2 rounded-md bg-accent/10 hover:bg-accent/15 transition-colors"
+                >
+                  <Paperclip size={14} className="text-accent shrink-0" />
+                  <span className="text-xs font-medium text-accent truncate">
+                    {message.file.split('/').pop()}
+                  </span>
+                  <Download size={12} className="text-accent/60 shrink-0 ml-auto group-hover:translate-y-0.5 transition-transform" />
+                </a>
+              )}
+            </>
           ) : (
             <div className="text-sm overflow-hidden [&_pre]:overflow-x-auto [&_pre]:whitespace-pre-wrap [&_pre]:break-words [&_code]:break-words [&_p]:break-words [&_h1]:break-words [&_h2]:break-words [&_h3]:break-words [&_li]:break-words">
-              <StreamingText
-                text={message.content}
-                isStreaming={isStreaming ?? false}
-              />
+              {segments.map((seg, idx) => {
+                const isLastSegment = idx === segments.length - 1;
+                const streaming = (isStreaming ?? false) && isLastSegment;
+                if (seg.type === 'resume') {
+                  return (
+                    <ResumeCard
+                      key={idx}
+                      content={seg.content}
+                      isStreaming={streaming}
+                    />
+                  );
+                }
+                return (
+                  <StreamingText
+                    key={idx}
+                    text={seg.content}
+                    isStreaming={streaming}
+                  />
+                );
+              })}
             </div>
           )}
         </div>

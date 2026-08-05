@@ -10,11 +10,22 @@ Structures:
       "messages": [
         {"role": "user"|"assistant", "content": "...", "timestamp": "ISO"}
       ],
-      "summary": "AI-generated summary of older messages (for context window)"
+      "summary": "AI-generated summary of older messages (for context window)",
+      "resume": {                                    <-- optional, set once per session
+        "filename": "resume.pdf",
+        "content": "extracted text...",
+        "uploaded_at": "ISO timestamp"
+      }
     }
 
 When a session has more than 7 messages, the oldest messages get rolled up
 into a summary and only the last 7 messages + summary are sent to the LLM.
+
+Resume file tracking:
+  - Only ONE file upload is allowed per session.
+  - Once uploaded, the extracted text is stored in the `resume` field and
+    re-injected into context on every subsequent turn.
+  - This eliminates redundant tool calls and confusing middleware-limit errors.
 """
 
 import json
@@ -81,7 +92,7 @@ def get_session(session_id: str) -> Optional[dict]:
         return json.load(f)
 
 
-def save_message(session_id: str, role: str, content: str):
+def save_message(session_id: str, role: str, content: str, filename: Optional[str] = None):
     """Append a message to the session."""
     session = get_session(session_id)
     if session is None:
@@ -92,11 +103,14 @@ def save_message(session_id: str, role: str, content: str):
             "messages": [],
             "summary": "",
         }
+    messageId = str(uuid.uuid4())
 
     session["messages"].append({
         "role": role,
         "content": content,
         "timestamp": datetime.now(timezone.utc).isoformat(),
+        "id": messageId,
+        "file": filename
     })
     session["updated_at"] = datetime.now(timezone.utc).isoformat()
 
@@ -142,7 +156,7 @@ def _rollup_summary(session: dict):
     )
 
 
-def get_context_messages(session_id: str, new_message: str) -> list[dict]:
+def get_context_messages(session_id: str, new_message: str, file_path: Optional[str] = None) -> list[dict]:
     """
     Build the message list for the LLM:
       - Summary of older conversation (if any)
@@ -162,15 +176,15 @@ def get_context_messages(session_id: str, new_message: str) -> list[dict]:
     if session.get("summary"):
         context.append({
             "role": "user",
-            "content": f"[Previous conversation summary]:\n{session['summary']}",
+            "content": f"[Previous conversation summary]:\n{session['summary']}"
         })
 
     # 2. Last N messages (most recent first preserved order)
     for msg in session["messages"]:
-        context.append({"role": msg["role"], "content": msg["content"]})
+        context.append({"role": msg["role"], "content": msg["content"], "resumefile": msg.get("file", None)})
 
     # 3. The new user message
-    context.append({"role": "user", "content": new_message})
+    context.append({"role": "user", "content": new_message, "resumefile": file_path})
 
     return context
 
@@ -183,3 +197,66 @@ def delete_session(session_id: str) -> bool:
         logger.info("Deleted session %s", session_id)
         return True
     return False
+
+
+# ── Resume file tracking (one per session) ────────────────
+
+
+def has_resume_file(session_id: str) -> bool:
+    """Check if a resume file has already been uploaded in this session."""
+    session = get_session(session_id)
+    return session is not None and "resume" in session
+
+
+def save_resume_file(session_id: str, filename: str, content: str) -> None:
+    """Store resume file metadata and extracted text in the session.
+    
+    This is a one-time operation per session — subsequent uploads should
+    be rejected at the API level.
+    """
+    session = get_session(session_id)
+    if session is None:
+        logger.warning("Session %s not found, cannot save resume", session_id)
+        return
+
+    session["resume"] = {
+        "filename": filename,
+        "content": content,
+        "uploaded_at": datetime.now(timezone.utc).isoformat(),
+    }
+    session["updated_at"] = datetime.now(timezone.utc).isoformat()
+    _persist(session)
+    logger.info(
+        "Saved resume file '%s' to session %s (%d chars)",
+        filename, session_id, len(content),
+    )
+
+
+def get_resume_context(session_id: str) -> Optional[str]:
+    """Return a context block for the LLM containing the previously uploaded resume.
+    
+    Returns None if no resume has been uploaded yet.
+    """
+    session = get_session(session_id)
+    if session is None:
+        return None
+    resume = session.get("resume")
+    if resume is None:
+        return None
+    return (
+        f"[Resume text from previously uploaded file: {resume['filename']}]\n"
+        f"{resume['content']}\n"
+        f"[End of resume text. You already have this data — do NOT call extract_resume_text again.]"
+    )
+
+
+def save_resume_file_in_storage(byteCode):
+    """Save the uploaded resume file in the storage folder and return the filename."""
+    storage_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "storage")
+    os.makedirs(storage_dir, exist_ok=True)
+    filename = f"resume_{uuid.uuid4().hex[:12]}.pdf"
+    path = os.path.join(storage_dir, filename)
+    with open(path, "wb") as f:
+        f.write(byteCode)
+    logger.info("Saved resume file to storage: %s", path)
+    return f"storage/{filename}"

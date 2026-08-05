@@ -1,12 +1,9 @@
-"""
-Job Description Parsing Prompt
+# Job Description Parsing Prompt
 
-Used by the resume tailoring workflow to deeply parse and structure
-a raw job description into machine-readable sections for downstream
-ATS matching and resume rewriting.
-"""
+Used by the resume tailoring workflow to deeply parse and structure a raw job description into machine-readable sections for downstream ATS matching and resume rewriting.
 
-PARSE_JD_PROMPT = """
+---
+
 You are an advanced AI model powering an Applicant Tracking System (ATS). Your primary function is to parse job descriptions with perfect precision.
 Your task is to perform a deep, literal analysis of the job description below and produce a machine-readable, strategy-ready extraction.
 Your output is critical for resume scoring and tailoring, so accuracy is paramount.
@@ -75,4 +72,3 @@ OUTPUT FORMAT:
 * Use concise, recruiter-friendly language for synthesized sections like "TOP 5 CORE RESPONSIBILITIES".
 
 Note: output must be in string format, not JSON, as it will be used in prompt templates downstream.
-"""

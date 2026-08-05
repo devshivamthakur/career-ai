@@ -10,35 +10,47 @@ const API_ORIGIN = import.meta.env.VITE_API_URL ?? '';
 const BASE_URL = API_ORIGIN ? `${API_ORIGIN}/api` : '/api';
 const HEALTH_URL = API_ORIGIN ? `${API_ORIGIN}/health` : '/health';
 
+// Requests that hang (no network, backend wedged) should fail fast instead of
+// leaving the UI in a loading state indefinitely.
+const REQUEST_TIMEOUT_MS = 30_000;
+
 async function fetchJson<T>(url: string, options?: RequestInit): Promise<T> {
-  const response = await fetch(url, {
-    headers: { 'Content-Type': 'application/json' },
-    ...options,
-  });
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
 
-  if (!response.ok) {
-    const errorBody = await response.text();
-    let detail = response.statusText;
-    try {
-      const parsed = JSON.parse(errorBody);
-      detail = parsed.detail ?? detail;
-    } catch {
-      // ignore parse errors
+  try {
+    const response = await fetch(url, {
+      headers: { 'Content-Type': 'application/json' },
+      ...options,
+      signal: controller.signal,
+    });
+
+    if (!response.ok) {
+      const errorBody = await response.text();
+      let detail = response.statusText;
+      try {
+        const parsed = JSON.parse(errorBody);
+        detail = parsed.detail ?? detail;
+      } catch {
+        // ignore parse errors
+      }
+
+      if (response.status === 422) {
+        throw new ApiValidationError(detail, response.status);
+      }
+      if (response.status === 429) {
+        throw new ApiError('Too many requests — please wait a moment', response.status);
+      }
+      if (response.status === 503) {
+        throw new ApiError('Service temporarily unavailable, try again shortly', response.status);
+      }
+      throw new ApiError(detail, response.status);
     }
 
-    if (response.status === 422) {
-      throw new ApiValidationError(detail, response.status);
-    }
-    if (response.status === 429) {
-      throw new ApiError('Too many requests — please wait a moment', response.status);
-    }
-    if (response.status === 503) {
-      throw new ApiError('Service temporarily unavailable, try again shortly', response.status);
-    }
-    throw new ApiError(detail, response.status);
+    return response.json();
+  } finally {
+    clearTimeout(timeoutId);
   }
-
-  return response.json();
 }
 
 class ApiError extends Error {

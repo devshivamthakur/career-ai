@@ -80,12 +80,25 @@ def initialize_semantic_cache():
         )
 
         # Initialize the underlying Redis semantic cache
-        redis_cache = RedisSemanticCache(
-            redis_url=settings.resolved_redis_url,
-            embeddings=embeddings,
-            distance_threshold=0.7, # Lower threshold for broader matching
-            ttl=60 * 60 * 8, # Cache entries expire after 8 hours
-        )
+        try:
+            redis_cache = RedisSemanticCache(
+                redis_url=settings.resolved_redis_url,
+                embeddings=embeddings,
+                distance_threshold=0.7, # Lower threshold for broader matching
+                ttl=60 * 60 * 8, # Cache entries expire after 8 hours
+            )
+        except Exception as e:
+            if "Index already exists" in str(e):
+                logger.info("Redis semantic cache index already exists (detected during concurrent initialization). Retrying...")
+                # Second attempt should see the index and skip creation
+                redis_cache = RedisSemanticCache(
+                    redis_url=settings.resolved_redis_url,
+                    embeddings=embeddings,
+                    distance_threshold=0.7,
+                    ttl=60 * 60 * 8,
+                )
+            else:
+                raise e
 
         # Set our service as the global LLM cache and the exported instance
         cacheInstance = SemanticCacheService(redis_cache)
