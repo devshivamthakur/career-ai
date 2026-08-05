@@ -1,6 +1,6 @@
 import { memo } from 'react';
-import { useLocation } from 'react-router-dom';
-import { Trash2 } from 'lucide-react';
+import { useLocation, Link } from 'react-router-dom';
+import { Trash2, Sparkles } from 'lucide-react';
 import { ConfirmPopover } from '../shared/ConfirmPopover';
 
 const pageNames: Record<string, string> = {
@@ -21,7 +21,13 @@ export const TopBar = memo(function TopBar({ onClearChat }: TopBarProps) {
 
   return (
     <header className="h-14 flex items-center justify-between px-6 border-b border-border bg-bg-surface shrink-0">
-      <h1 className="text-base font-semibold text-text-primary">{pageName}</h1>
+      <div className="flex items-center gap-3">
+        <Link to="/" className="flex items-center gap-1.5 text-text-secondary hover:text-accent transition-colors">
+          <Sparkles size={16} />
+        </Link>
+        <span className="text-text-tertiary">/</span>
+        <h1 className="text-base font-semibold text-text-primary">{pageName}</h1>
+      </div>
 
       <div className="flex items-center gap-3">
         {isChat && onClearChat && (

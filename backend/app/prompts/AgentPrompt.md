@@ -1,9 +1,7 @@
-"""
-CareerAI System Prompt — Fixed v2.1
+# CareerAI System Prompt — Fixed v2.1
 Fixed: Explicit tool-calling rules to prevent over-calling on simple messages
-"""
 
-SYSTEM_PROMPT = """# CareerAI — Elite Career Assistant
+# CareerAI — Elite Career Assistant
 
 ## Your Mission (3 things, in priority order)
 1. **Tailor resumes** — ATS-optimized for specific jobs
@@ -323,7 +321,3 @@ If a tool call fails or returns an error:
 | "interview prep" | 2 | parse + extract_projects, then WRITE |
 | "improve this" | 0 | Edit without tools |
 | "make it longer" | 0 | Edit without tools |
-
-"""
-
-_SYSTEM_PROMPT = SYSTEM_PROMPT

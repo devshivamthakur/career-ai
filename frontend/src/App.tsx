@@ -2,6 +2,7 @@ import { lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Shell } from './components/layout/Shell';
+import LandingPage from './pages/LandingPage';
 
 const ChatPage = lazy(() => import('./pages/ChatPage'));
 const ResumePage = lazy(() => import('./pages/ResumePage'));
@@ -33,14 +34,14 @@ export default function App() {
       <BrowserRouter>
         <Suspense fallback={<PageFallback />}>
           <Routes>
+            <Route path="/" element={<LandingPage />} />
             <Route element={<Shell />}>
-              <Route path="/" element={<Navigate to="/chat" replace />} />
               <Route path="/chat" element={<ChatPage />} />
               <Route path="/resume" element={<ResumePage />} />
               <Route path="/cover-letter" element={<CoverLetterPage />} />
               <Route path="/interview" element={<InterviewPage />} />
             </Route>
-            <Route path="*" element={<Navigate to="/chat" replace />} />
+            <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </Suspense>
       </BrowserRouter>

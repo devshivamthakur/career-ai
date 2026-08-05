@@ -36,7 +36,7 @@ from app.core.llm import build_chat_model
 from app.core.config import settings
 from app.agents.tools import ALL_TOOLS
 from app.utils import build_langfuse_callbacks
-from app.prompts.AgentPrompt import _SYSTEM_PROMPT
+from app.prompts.loader import _SYSTEM_PROMPT
 
 logger = logging.getLogger(__name__)
 

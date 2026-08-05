@@ -15,10 +15,14 @@ from langchain_core.output_parsers import PydanticOutputParser
 from langchain_core.outputs import Generation
 
 from app.core.config import settings
-from app.prompts.jd_parsing_prompts import PARSE_JD_PROMPT
-from app.prompts.skills_prompts import EXTRACT_SKILLS_PROMPT, COMPARE_SKILLS_PROMPT
-from app.prompts.resume_prompts import REWRITE_RESUME_PROMPT, POLISH_RESUME_PROMPT
-from app.prompts.validation_prompts import VALIDATE_JD_PROMPT
+from app.prompts.loader import (
+    PARSE_JD_PROMPT,
+    EXTRACT_SKILLS_PROMPT,
+    COMPARE_SKILLS_PROMPT,
+    REWRITE_RESUME_PROMPT,
+    POLISH_RESUME_PROMPT,
+    VALIDATE_JD_PROMPT,
+)
 from app.schemas.resume_schemas import JDValidationResult, SkillsComparisonResult
 from app.core.caching import get_cache
 from app.utils import build_langfuse_callbacks

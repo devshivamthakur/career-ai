@@ -13,7 +13,7 @@ from langchain_core.messages import HumanMessage
 
 from app.services.pdf_service import PDFParsingService
 from app.core.llm import build_chat_model
-from app.prompts.skills_prompts import COMPARE_SKILLS_PROMPT
+from app.prompts.loader import COMPARE_SKILLS_PROMPT
 from langchain_core.output_parsers import PydanticOutputParser
 
 from app.schemas.resume_schemas import SkillsComparisonResult

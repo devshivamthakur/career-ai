@@ -11,11 +11,14 @@ from langchain_core.outputs import Generation
 
 from app.core.config import settings
 from app.core.caching import get_cache
-from app.prompts.jd_parsing_prompts import PARSE_JD_PROMPT
-from app.prompts.skills_prompts import EXTRACT_SKILLS_PROMPT, EXTRACT_PROJECTS_PROMPT
-from app.prompts.cover_letter_prompts import COVER_LETTER_PROMPT
-from app.prompts.interview_prompts import INTERVIEW_PREP_PROMPT
-from app.prompts.validation_prompts import VALIDATE_JD_PROMPT
+from app.prompts.loader import (
+    PARSE_JD_PROMPT,
+    EXTRACT_SKILLS_PROMPT,
+    EXTRACT_PROJECTS_PROMPT,
+    COVER_LETTER_PROMPT,
+    INTERVIEW_PREP_PROMPT,
+    VALIDATE_JD_PROMPT,
+)
 from app.schemas.resume_schemas import (
     JDValidationResult,
     InterviewQuestions,

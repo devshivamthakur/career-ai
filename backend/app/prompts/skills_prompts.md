@@ -1,15 +1,12 @@
-"""
-Resume Skills Extraction and ATS Comparison Prompts
+# Resume Skills Extraction and ATS Comparison Prompts
 
-Used by the resume tailoring and career assistant workflows to extract
-structured skill profiles from resumes and compare them against
-job description requirements.
-"""
+Used by the resume tailoring and career assistant workflows to extract structured skill profiles from resumes and compare them against job description requirements.
 
-EXTRACT_SKILLS_PROMPT = """
-You are a professional resume parser and career intelligence engine. Extract a complete, structured
-profile from the resume below. This profile will be used to compare against a job description and
-drive targeted resume rewriting.
+---
+
+## EXTRACT_SKILLS_PROMPT
+
+You are a professional resume parser and career intelligence engine. Extract a complete, structured profile from the resume below. This profile will be used to compare against a job description and drive targeted resume rewriting.
 
 ─────────────────────────────────────────────
 RESUME TEXT:
@@ -18,6 +15,7 @@ RESUME TEXT:
 
 EXTRACTION REQUIREMENTS — Produce a JSON object with the following schema:
 
+```json
 {{
   "contact": {{
     "name": "",
@@ -97,6 +95,7 @@ EXTRACTION REQUIREMENTS — Produce a JSON object with the following schema:
     "Top 5 strengths inferred from the overall resume pattern"
   ]
 }}
+```
 
 INSTRUCTIONS:
 - Extract verbatim where possible; synthesize only when necessary.
@@ -104,13 +103,14 @@ INSTRUCTIONS:
 - Capture ALL technologies — even those mentioned in passing.
 - Flag missing but expected fields (e.g., no summary, no metrics) in a separate "gaps" array.
 - Return only valid JSON. No markdown, no preamble, no explanation.
-"""
 
-COMPARE_SKILLS_PROMPT = """
+---
+
+## COMPARE_SKILLS_PROMPT
+
 You are an elite ATS resume strategist and hiring intelligence expert.
 
-Your task is to deeply compare a candidate profile against a target job description
-and generate a structured ATS-focused skill analysis in JSON format.
+Your task is to deeply compare a candidate profile against a target job description and generate a structured ATS-focused skill analysis in JSON format.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 JOB REQUIREMENTS ANALYSIS:
@@ -133,9 +133,11 @@ IMPORTANT RULES:
 - Think like both an ATS system and a senior recruiter.
 - Use concise but detailed professional analysis.
 - Avoid generic feedback. The entire output must be a single JSON object.
-"""
 
-EXTRACT_PROJECTS_PROMPT = """
+---
+
+## EXTRACT_PROJECTS_PROMPT
+
 You are a resume intelligence analyst. Extract the candidate's most relevant projects from the resume text below.
 Return a JSON array of up to 4 objects with keys: name, role, technologies, challenge, action, impact.
 If a project is not explicitly named, summarize the work in a short project description.
@@ -144,5 +146,3 @@ RESUME TEXT:
 {resume_text}
 
 OUTPUT MUST BE VALID JSON ONLY.
-
-"""

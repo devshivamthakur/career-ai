@@ -1,8 +1,9 @@
 import { memo } from 'react';
 import { NavLink } from 'react-router-dom';
-import { MessageSquare, FileText, PenLine, Briefcase } from 'lucide-react';
+import { Home, MessageSquare, FileText, PenLine, Briefcase } from 'lucide-react';
 
 const tabs = [
+  { to: '/', label: 'Home', icon: Home },
   { to: '/chat', label: 'Chat', icon: MessageSquare },
   { to: '/resume', label: 'Resume', icon: FileText },
   { to: '/cover-letter', label: 'Letter', icon: PenLine },

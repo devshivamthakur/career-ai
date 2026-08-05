@@ -68,10 +68,10 @@ export const MessageBubble = memo(function MessageBubble({ message, isStreaming 
       <div className={`max-w-[80%] min-w-0 ${isUser ? 'order-1' : 'order-1'}`}>
         {/* Bubble */}
         <div
-          className={`rounded-lg px-4 py-3 overflow-hidden ${
+          className={`rounded-xl px-4 py-3 overflow-hidden ${
             isUser
-              ? 'bg-accent-soft text-text-primary rounded-br-md'
-              : 'bg-bg-surface border-l-2 border-accent text-text-primary rounded-bl-md'
+              ? 'bg-accent/15 text-text-primary rounded-br-md border border-accent/20'
+              : 'bg-bg-surface border border-border text-text-primary rounded-bl-md'
           }`}
         >
           {isUser ? (

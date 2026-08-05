@@ -127,7 +127,7 @@ export function InputBar({
             rows={1}
             maxLength={LIMITS.MAX_CHAT_MESSAGE_LENGTH}
             disabled={disabled}
-            className="w-full resize-none bg-bg-base border border-border rounded-lg px-3 py-2 text-sm text-text-primary placeholder-text-secondary outline-none focus:border-accent/50 transition-colors disabled:opacity-50"
+            className="w-full resize-none bg-bg-base border border-border rounded-lg px-3 py-2 text-sm text-text-primary placeholder-text-tertiary outline-none focus:border-accent/50 transition-colors disabled:opacity-50"
             style={{ maxHeight: '120px' }}
           />
         </div>
