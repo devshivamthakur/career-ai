@@ -25,6 +25,7 @@ from app.api.errors import (
     validation_exception_handler,
 )
 from app.api.middleware import (
+    IPBanMiddleware,
     MaxBodySizeMiddleware,
     RequestContextMiddleware,
     RequestLoggingMiddleware,
@@ -73,6 +74,9 @@ def create_app() -> FastAPI:
     app.add_middleware(SecurityHeadersMiddleware)
     app.add_middleware(RequestLoggingMiddleware)
     app.add_middleware(MaxBodySizeMiddleware)
+    # IP ban / auto-ban middleware - blocks banned IPs and counts suspicious
+    # scanner traffic toward auto-ban thresholds.
+    app.add_middleware(IPBanMiddleware)
     # Compression must be outermost-ish so it can wrap everything below it
     # while still skipping SSE streaming endpoints.
     app.add_middleware(SelectiveGZipMiddleware)
