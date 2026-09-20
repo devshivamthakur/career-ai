@@ -22,6 +22,7 @@ class Settings(BaseSettings):
     REDIS_HOST: Optional[str] = None
     REDIS_PORT: int = 6379
     REDIS_URL: str = "redis://localhost:6379"
+    REDIS_MAX_CONNECTIONS: int = 5
 
     @property
     def resolved_redis_url(self) -> str:

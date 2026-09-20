@@ -14,6 +14,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from app.core.caching import initialize_semantic_cache
+from app.core.redis_client import close_redis
 
 logger = logging.getLogger(__name__)
 
@@ -26,4 +27,5 @@ async def lifespan(app: FastAPI):
     try:
         yield
     finally:
+        await close_redis()
         logger.info("Shutting down %s", app.title)

@@ -18,35 +18,29 @@ from collections import defaultdict, deque
 from typing import Deque, Optional
 
 from fastapi import HTTPException, Request, status
-from redis.asyncio import Redis
-
 from app.core.config import settings
 from app.core.infrastructure import ServiceConfig
+from app.core.redis_client import get_redis
 from app.core.security import get_client_ip
 
 logger = logging.getLogger(__name__)
 
-_REDIS: Optional[Redis] = None
 _REDIS_FAILED = False
 
 # In-memory fallback: client_id -> recent request timestamps
 _MEMORY_LIMITS: dict[str, Deque[float]] = defaultdict(deque)
 
 
-def _get_redis() -> Optional[Redis]:
+def _get_redis():
     """Lazily create the Redis client once. Returns None if Redis is down."""
-    global _REDIS, _REDIS_FAILED
-    if _REDIS is None and not _REDIS_FAILED:
+    global _REDIS_FAILED
+    if not _REDIS_FAILED:
         try:
-            _REDIS = Redis.from_url(
-                settings.resolved_redis_url,
-                encoding="utf-8",
-                decode_responses=True,
-            )
+            return get_redis()
         except Exception as exc:  # pragma: no cover - defensive
             logger.error("Rate limiter: Redis client init failed: %s", exc)
             _REDIS_FAILED = True
-    return _REDIS
+    return None
 
 
 def _format_key(client_id: str) -> str:
