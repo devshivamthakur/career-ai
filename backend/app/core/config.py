@@ -11,7 +11,6 @@ class Settings(BaseSettings):
     ENVIRONMENT: str = "development"
     
     # Database
-    DATABASE_URL: str
 
     # Connection pool tuning (per gunicorn worker)
     DB_POOL_SIZE: int = 5
