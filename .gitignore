@@ -163,3 +163,5 @@ temp/
 # frontend/yarn.lock
 # backend/uv.lock
 backend/app/chat_sessions/
+.vercel
+.env*

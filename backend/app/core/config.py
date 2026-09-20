@@ -1,3 +1,5 @@
+import os
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from typing import Optional
 
@@ -9,6 +11,19 @@ class Settings(BaseSettings):
     PROJECT_NAME: str = "CareerAI"
     VERSION: str = "1.0.0"
     ENVIRONMENT: str = "development"
+
+    # Runtime-writable file storage. Vercel's deployed filesystem is read-only
+    # except for /tmp; STORAGE_PATH can override this for other environments.
+    STORAGE_PATH: Optional[str] = None
+
+    @property
+    def storage_path(self) -> str:
+        """Return the directory used for runtime-generated files."""
+        if self.STORAGE_PATH:
+            return os.path.abspath(os.path.expanduser(self.STORAGE_PATH))
+        if os.getenv("VERCEL"):
+            return "/tmp/careerai-storage"
+        return os.path.join(os.path.dirname(os.path.dirname(__file__)), "storage")
     
     # Database
 

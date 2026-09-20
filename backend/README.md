@@ -150,6 +150,7 @@ cp .env.example .env   # then edit .env with your keys
 |---|---|---|---|
 | `DATABASE_URL` | ✅ | — | PostgreSQL connection string |
 | `REDIS_URL` | | `redis://localhost:6379` | Redis connection string |
+| `STORAGE_PATH` | | local `app/storage`, Vercel `/tmp/careerai-storage` | Writable directory for uploaded/generated files |
 | `OPENAI_API_KEY` | * | — | OpenAI API key (if using OpenAI provider) |
 | `LLM_PROVIDER` | | `openai` | `openai` or `aws` |
 | `AWS_REGION` | * | — | AWS region (if using Bedrock) |
