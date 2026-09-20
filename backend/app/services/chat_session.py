@@ -35,6 +35,8 @@ import uuid
 from datetime import datetime, timezone
 from typing import Optional
 
+from app.core.config import settings
+
 logger = logging.getLogger(__name__)
 
 # ── Config ────────────────────────────────────────────────
@@ -252,7 +254,7 @@ def get_resume_context(session_id: str) -> Optional[str]:
 
 def save_resume_file_in_storage(byteCode):
     """Save the uploaded resume file in the storage folder and return the filename."""
-    storage_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "storage")
+    storage_dir = settings.storage_path
     os.makedirs(storage_dir, exist_ok=True)
     filename = f"resume_{uuid.uuid4().hex[:12]}.pdf"
     path = os.path.join(storage_dir, filename)

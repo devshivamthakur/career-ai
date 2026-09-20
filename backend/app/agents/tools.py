@@ -9,6 +9,8 @@ import os
 import re
 from pydantic import BaseModel, Field
 
+from app.core.config import settings
+
 from langchain_core.messages import HumanMessage
 
 from app.services.pdf_service import PDFParsingService
@@ -66,9 +68,7 @@ def _resolve_storage_path(pdf_path: str) -> str:
     if os.path.isabs(pdf_path) or os.path.exists(pdf_path):
         return pdf_path
 
-    # tools.py lives at app/agents/tools.py → package root is two levels up
-    app_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    candidate = os.path.join(app_root, pdf_path)
+    candidate = os.path.join(settings.storage_path, os.path.basename(pdf_path))
     if os.path.exists(candidate):
         logger.info("Resolved PDF path %s → %s", pdf_path, candidate)
         return candidate

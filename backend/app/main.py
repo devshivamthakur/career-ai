@@ -9,7 +9,6 @@ configured in dedicated modules (``app.api.middleware``, ``app.api.errors``,
 from __future__ import annotations
 
 import logging
-import os
 
 from fastapi import FastAPI
 from fastapi.exceptions import RequestValidationError
@@ -92,7 +91,7 @@ def create_app() -> FastAPI:
     app.include_router(api_router)
 
     # ── Static file serving (uploaded resume PDFs) ───────────────
-    storage_path = os.path.join(os.path.dirname(__file__), "storage")
+    storage_path = settings.storage_path
     os.makedirs(storage_path, exist_ok=True)
     app.mount("/storage", StaticFiles(directory=storage_path), name="storage")
 
