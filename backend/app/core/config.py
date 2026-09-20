@@ -86,6 +86,23 @@ class Settings(BaseSettings):
     # API Key for additional authentication (optional)
     API_KEY: Optional[str] = None
 
+    # ── IP Ban / Auto-Ban ─────────────────────────────────────────
+    # Static whitelist of IPs/CIDRs that are never banned or auto-banned.
+    # Comma-separated; supports both exact IPs and CIDR ranges.
+    IP_BAN_WHITELIST: list[str] = ["127.0.0.1", "::1"]
+
+    # Path prefixes that are never counted as suspicious (legitimate app routes).
+    IP_BAN_SAFE_PATH_PREFIXES: list[str] = ["/api", "/docs", "/redoc", "/openapi.json", "/health", "/storage"]
+
+    # Number of security violations within the window before auto-ban.
+    IP_BAN_VIOLATIONS_BEFORE_BAN: int = 5
+
+    # Sliding window (seconds) for counting violations.
+    IP_BAN_VIOLATION_WINDOW_SECONDS: int = 300
+
+    # Default ban duration (seconds).
+    IP_BAN_DEFAULT_TTL_SECONDS: int = 3600
+
     # Allowed Host headers (TrustedHostMiddleware). Comma-separated; "*" allows all.
     ALLOWED_HOSTS: str = "*"
 

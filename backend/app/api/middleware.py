@@ -10,12 +10,13 @@ from __future__ import annotations
 import logging
 import time
 
-from fastapi import Request
+from fastapi import Request,Response
 from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.responses import Response
+from starlette.responses import JSONResponse
 
 from app.core.config import settings
 from app.core.security import get_client_ip, parse_allowed_origins
+from app.services.ip_ban_service import ip_ban_service
 from app.utils.helpers import generate_request_id
 
 logger = logging.getLogger(__name__)
@@ -161,3 +162,85 @@ class MaxBodySizeMiddleware(BaseHTTPMiddleware):
                 )
 
         return await call_next(request)
+
+
+class IPBanMiddleware(BaseHTTPMiddleware):
+    """
+    Middleware that blocks banned IPs and counts *unauthenticated* suspicious
+    scanner traffic toward an auto-ban threshold.
+
+    Key behaviour:
+      1. If the IP is banned (or auto-banned) -> 403.
+      2. If the IP is on the static or dynamic whitelist -> always allowed.
+      3. Suspicious-path violation counting is skipped when the request is
+         either authenticated with a JWT or carrying the admin API key.
+         That prevents legitimate admin dashboard traffic from triggering
+         an auto-ban just because the URL contains the segment "admin".
+      4. Only requests that look like real scanner/probe traffic (.env,
+         .git, wp-*, xmlrpc.php, *.php, etc.) count as violations.
+    """
+
+    # Paths that don't count as security violations (legitimate access).
+    EXEMPT_PATHS = [
+        "/",
+        "/health",
+        "/docs",
+        "/redoc",
+        "/openapi.json",
+        "/favicon.ico",
+    ]
+
+    async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> JSONResponse:
+        client_ip = request.client.host if request.client else "unknown"
+
+        # 1) Banned -> blocked (whitelisted IPs short-circuit this).
+        if await ip_ban_service.is_banned(client_ip):
+            logger.warning(
+                "Blocked banned IP access attempt: %s -> %s",
+                client_ip,
+                request.url.path,
+            )
+            return JSONResponse(
+                status_code=403,
+                content={
+                    "error": "Forbidden",
+                    "message": "Your IP has been blocked due to suspicious activity.",
+                    "detail": "If you believe this is an error, please contact support.",
+                },
+            )
+
+        # 2) Suspicious-path detection - only for unauthenticated requests.
+        #    The path itself is also re-checked against the safe-prefix
+        #    allow-list inside is_suspicious_path().
+        path = request.url.path
+        if path not in self.EXEMPT_PATHS and ip_ban_service.is_suspicious_path(path):
+            if not self._looks_authenticated(request):
+                await ip_ban_service.record_security_violation(client_ip, path)
+
+        response = await call_next(request)
+
+        # 3) Rate-limited -> record violation for potential auto-ban
+        #    (again, only for unauthenticated callers).
+        if response.status_code == 429 and not self._looks_authenticated(request):
+            await ip_ban_service.record_rate_limit_violation(client_ip)
+
+        return response
+
+    @staticmethod
+    def _looks_authenticated(request: Request) -> bool:
+        """
+        Return True if the request carries either:
+          * a Bearer JWT in the Authorization header, or
+          * the admin API key in the X-API-Key header.
+
+        Note: this is purely a *presence* check used to exempt clearly
+        legitimate traffic from scanner-style counters. It does NOT
+        validate the token/key here - the route's own dependency does
+        that and will return 401/403 if the credential is bad.
+        """
+        auth = request.headers.get("authorization", "")
+        if auth.lower().startswith("bearer ") and auth[7:].strip():
+            return True
+        if request.headers.get("x-api-key"):
+            return True
+        return False
