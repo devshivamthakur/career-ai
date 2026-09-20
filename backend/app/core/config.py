@@ -128,7 +128,13 @@ class Settings(BaseSettings):
         if raw == "*" or raw == '"*"':
             return ["*"]
         # Split by comma and strip whitespace + quotes from each entry
-        return [h.strip().strip("'").strip('"') for h in raw.split(",") if h.strip()]
+        hosts = [h.strip().strip("'").strip('"') for h in raw.split(",") if h.strip()]
+        if os.getenv("VERCEL"):
+            hosts.append("*.vercel.app")
+            vercel_url = os.getenv("VERCEL_URL")
+            if vercel_url:
+                hosts.append(vercel_url)
+        return hosts
 
     # Maximum accepted request body size (MB) — guards against abuse
     MAX_BODY_SIZE_MB: int = 15
