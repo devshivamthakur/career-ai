@@ -22,16 +22,11 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Optional
 
-from redis.asyncio import Redis
-
 from app.core.config import settings
 from app.core.infrastructure import ServiceConfig
+from app.core.redis_client import get_redis
 
 logger = logging.getLogger(__name__)
-
-# Module-level Redis client singleton (same pattern as rate_limit.py)
-_REDIS: Optional[Redis] = None
-
 
 class BanReason(str, Enum):
     MANUAL_BAN = "manual"
@@ -162,21 +157,13 @@ class IPBanService:
             logger.error("Error checking ban status for %s: %s", client_ip, str(e))
             return False
 
-    async def _get_redis(self) -> Optional[Redis]:
+    async def _get_redis(self):
         """Get Redis client, following the same pattern as rate_limit.py."""
-        global _REDIS
-
-        if _REDIS is None:
-            try:
-                _REDIS = Redis.from_url(
-                    settings.resolved_redis_url,
-                    encoding="utf-8",
-                    decode_responses=True,
-                )
-            except Exception as e:
-                logger.error("Redis client init failed: %s", str(e))
-                _REDIS = None
-        return _REDIS
+        try:
+            return get_redis()
+        except Exception as e:
+            logger.error("Redis client init failed: %s", str(e))
+            return None
 
     async def ban_ip(
         self,
