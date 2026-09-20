@@ -9,6 +9,7 @@ configured in dedicated modules (``app.api.middleware``, ``app.api.errors``,
 from __future__ import annotations
 
 import logging
+import os
 
 from fastapi import FastAPI
 from fastapi.exceptions import RequestValidationError
